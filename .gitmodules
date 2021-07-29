@@ -1,0 +1,3 @@
+[submodule "symbolic_behaviour_benchmark/thirdparty/ReferentialGym"]
+	path = symbolic_behaviour_benchmark/thirdparty/ReferentialGym
+	url = https://github.com/Near32/ReferentialGym
