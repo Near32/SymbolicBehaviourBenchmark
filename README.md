@@ -6,7 +6,7 @@ Suite of OpenAI Gym-compatible multi-agent reinforcement learning environment to
 
 ## Usage
 
-`gym` must be installed. Environments can be created as follows:
+`gym` must be installed. Environments can be created as follows, for instance, in order to test for receptivity and constructivity:
 
 ```python
 >>> import gym
