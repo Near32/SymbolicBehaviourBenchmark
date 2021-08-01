@@ -198,9 +198,64 @@ class MultiBinaryCommunicationChannelWrapper(gym.Wrapper):
         )
         return next_observations, reward, done, next_infos
 
+class StimulusObservationWrapper(gym.Wrapper):
+    """
+    Assumes the :arg env: environment to have a Dict observation space,
+    that contains the key 'stimulus'.
+    This wrapper makes the observation space consisting of solely the 'stimulus' entry,
+    while the other entries are put in the infos dictionnary.
+    Args:
+        env (gym.Env): Env to wrap.
+    """
 
-def s2b_wrap(env, combined_actions=False):
+    def __init__(self, env):
+        super(StimulusObservationWrapper, self).__init__(env)
+        
+        self.observation_space = env.observation_space.spaces["stimulus"]
+
+        self.action_space = env.action_space 
+
+    def reset(self, **kwargs):
+        observations, infos = self.env.reset(**kwargs)
+        nbr_agent = len(infos)
+        
+        new_observations = [obs["stimulus"] for obs in observations]
+
+        for agent_idx in range(nbr_agent):
+            oobs = observations[agent_idx]
+
+            for k,v in oobs.items():
+                if k=="stimulus":  continue
+                infos[agent_idx][k] = v
+
+        return new_observations, infos 
+    
+    def step(self, action):
+        next_observations, reward, done, next_infos = self.env.step(action)        
+        nbr_agent = len(next_infos)
+        
+        new_next_observations = [obs["stimulus"] for obs in next_observations]
+
+        for agent_idx in range(nbr_agent):
+            oobs = next_observations[agent_idx]
+
+            for k,v in oobs.items():
+                if k=="stimulus":  continue
+                next_infos[agent_idx][k] = v
+        
+        return new_next_observations, reward, done, next_infos
+
+    def render(self, mode='human', **kwargs):
+        env = self.unwrapped
+        return env.render(
+            mode=mode,
+            **kwargs,
+        )
+        
+def s2b_wrap(env, combined_actions=False, dict_obs_space=False):
     if combined_actions:
         env = DiscreteCombinedActionWrapper(env)
     env = MultiBinaryCommunicationChannelWrapper(env)
+    if not dict_obs_space:
+        env = StimulusObservationWrapper(env)
     return env
