@@ -1,4 +1,5 @@
 from .envs import *
+from .utils import * 
 
 import gym
 from gym.envs.registration import register

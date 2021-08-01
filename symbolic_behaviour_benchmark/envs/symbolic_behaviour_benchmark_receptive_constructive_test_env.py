@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 from symbolic_behaviour_benchmark.envs.communication_channel import CommunicationChannel 
 from symbolic_behaviour_benchmark.symbolic_continuous_stimulus_dataset import SymbolicContinuousStimulusDataset 
 
-from symbolic_behaviour_benchmark.thirdparty.ReferentialGym.ReferentialGym import datasets as referentialgame_datasets
+from symbolic_behaviour_benchmark.utils import DualLabeledDataset
+from symbolic_behaviour_benchmark.utils import DictDatasetWrapper
 
 
 class CommunicationChannelPermutation(object):
@@ -47,11 +48,11 @@ class CommunicationChannelPermutation(object):
         comm = copy.deepcopy(
             obs.get(
                 "communication_channel", 
-                np.zeros(shape=(self.max_sentence_length,), dtype=np.int64)
+                np.zeros(shape=(1,self.max_sentence_length,), dtype=np.int64)
             )
         )
         for idx in range(self.max_sentence_length):
-            comm[idx] = self.communication_channel_bijection_encoder[comm[idx].item()]
+            comm[0,idx] = self.communication_channel_bijection_encoder[comm[0,idx].item()]
         self.new_obs["communication_channel"] = comm
         
         return copy.deepcopy(self.new_obs)
@@ -77,11 +78,11 @@ class CommunicationChannelPermutation(object):
         comm = copy.deepcopy(
             action.get(
                 "communication_channel", 
-                np.zeros(shape=(self.max_sentence_length,), dtype=np.int64)
+                np.zeros(shape=(1,self.max_sentence_length,), dtype=np.int64)
             )
         )
         for idx in range(self.max_sentence_length):
-            comm[idx] = self.communication_channel_bijection_decoder[comm[idx].item()]
+            comm[0,idx] = self.communication_channel_bijection_decoder[comm[0,idx].item()]
         self.new_action["communication_channel"] = comm 
 
         return copy.deepcopy(self.new_action)
@@ -103,11 +104,11 @@ class CommunicationChannelPermutation(object):
         comm = copy.deepcopy(
             action.get(
                 "communication_channel", 
-                np.zeros(shape=(self.max_sentence_length, ), dtype=np.int64)
+                np.zeros(shape=(1,self.max_sentence_length, ), dtype=np.int64)
             )
         )
         for idx in range(self.max_sentence_length):
-            comm[idx] = self.communication_channel_bijection_encoder[comm[idx].item()]
+            comm[0,idx] = self.communication_channel_bijection_encoder[comm[0,idx].item()]
         new_action["communication_channel"] = comm 
 
         return copy.deepcopy(new_action)
@@ -121,7 +122,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
     def __init__(
         self,
         rg_config:Dict[str,str],
-        datasets:Dict[str,referentialgame_datasets.DualLabeledDataset],
+        datasets:Dict[str,DualLabeledDataset],
         seed=1337,
         allow_listener_query=False,
         use_communication_channel_permutations=True,
@@ -215,9 +216,9 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         # Regularise the use of EoS symbol:
         make_eos = False
         # batch dim=1 x max_sentence_length...
-        for idx, o in enumerate(communication_channel_content):
+        for idx, o in enumerate(communication_channel_content[0]):
             if make_eos:    
-                communication_channel_content[idx] = 0
+                communication_channel_content[0,idx] = 0
                 continue
             if o==0:
                 make_eos = True
@@ -259,30 +260,19 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
             # Which stimulus ?
             self.stimulus_idx = 0 
-            self.round_idx = -1
+            self.round_idx = 0
+            self.episode_ended = False
 
         it_dataset = self.dataloader_index
         #data_loader = self.data_loaders[self.dataloader_index2mode[self.dataloader_index]]
         data_loader = self.datasets[self.dataloader_index2mode[self.dataloader_index]]
 
-        if self.round_idx!=0:
-            self.sample = data_loader[self.stimulus_idx]
+        if self.round_idx==0\
+        and not self.episode_ended:
+                self.sample = data_loader[self.stimulus_idx]
 
-        self.end_of_dataset = (self.stimulus_idx==len(data_loader)-1)
-
-        self.round_idx = (self.round_idx+1)%2
-
-        if self.round_idx == 1:
-            self.stimulus_idx = (self.stimulus_idx+1)%len(data_loader)
-
-        if self.end_of_dataset\
-        and self.round_idx==1:
-            self.dataloader_index += 1
-            self.mode = self.dataloader_index2mode[self.dataloader_index]
-            self.stimulus_idx = 0
-
-        if self.end_of_dataset \
-        and self.round_idx==1 \
+        if self.episode_ended \
+        and self.round_idx==0 \
         and self.dataloader_index>=(len(self.dataloader_index2mode)-1):
             self.done = True
         else:
@@ -335,10 +325,22 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         info = {key:value for key, value in self.sample.items()}
         info['round_idx'] = self.round_idx
         info['stimulus_idx'] = self.stimulus_idx
-        info['end_of_dataset'] = self.end_of_dataset
         info['step_idx'] = self.step_count
         
         self.infos = [copy.deepcopy(info) for _ in range(self.nbr_players)]
+        
+        # Bookkeeping: setting values for next call:
+        self.round_idx = (self.round_idx+1)%2
+
+        if self.round_idx==0:
+            self.stimulus_idx = (self.stimulus_idx+1)%len(data_loader)
+
+            if self.stimulus_idx==0:
+                self.dataloader_index = (self.dataloader_index+1)%len(self.dataloader_index2mode)
+                self.mode = self.dataloader_index2mode[self.dataloader_index]
+            
+                if self.dataloader_index==0:
+                    self.episode_ended = True
         
         return self.observations, self.infos
 
@@ -383,8 +385,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
         # Communication channel:
         self.communication_history = {
-            "speaker":[np.zeros((self.max_sentence_length))],
-            "listener":[np.zeros((self.max_sentence_length))],
+            "speaker":[np.zeros((1,self.max_sentence_length))],
+            "listener":[np.zeros((1,self.max_sentence_length))],
         }
         
         self.agent_ids = []
@@ -440,22 +442,23 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         """
         reward = 0.0
 
-        if self.round_idx==1:
+        if self.round_idx==0:
             # then we have just received the listener's decision:
             if self.listener_actions["decision"] == self.sample["target_decision_idx"].item():
-                import ipdb; ipdb.set_trace()
                 self.previous_game_was_successful = True 
             else:
                 self.previous_game_was_successful = False 
 
-            if self.mode == "test":
-                if self.previous_game_was_successful:
-                    reward = 1.0
+            if self.previous_game_was_successful:
+                reward = 1.0
+            else:
+                if self.mode == "test":
+                    reward = -2.0
                 else:
-                    reward = -1.0
+                    reward = 0.0
 
             
-        if self.round_idx == 1:
+        if self.round_idx==0:
             self.previous_game_reward = np.ones(1)*reward 
             self.previous_game_result = np.zeros(2)
             if self.previous_game_was_successful:
@@ -463,7 +466,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             else:
                 self.previous_game_result[0] = 1
 
-        return reward 
+        return reward
 
 
 def generate_receptive_constructive_test_env(**kwargs):
@@ -471,9 +474,9 @@ def generate_receptive_constructive_test_env(**kwargs):
     if rg_config is None:
         rg_config = {
             "observability":            "full",
-            "max_sentence_length":      kwargs.get("max_sentence_length",5),
+            "max_sentence_length":      kwargs.get("max_sentence_length",3),
             "nbr_communication_round":  1,
-            "nbr_distractors":          {"train":2, "test":2},
+            "nbr_distractors":          {"train":3, "test":3},
             "distractor_sampling":      'uniform',
             # Default: use 'uniform' or "similarity-0.5"
             # otherwise the emerging language 
@@ -491,7 +494,7 @@ def generate_receptive_constructive_test_env(**kwargs):
             "graphtype":                'reinforce-like',
             "tau0":                     0.2,
             "gumbel_softmax_eps":       1e-6,
-            "vocab_size":               kwargs.get("vocab_size",10),
+            "vocab_size":               kwargs.get("vocab_size",6),
             #"force_eos":                False,
             #"symbol_embedding_size":    64, #64
 
@@ -628,28 +631,32 @@ def generate_receptive_constructive_test_env(**kwargs):
         train_dataset = dataset_args["train"]["modes"]["train"]
         need_dict_wrapping = dataset_args["train"]['need_dict_wrapping']
         if "train" in need_dict_wrapping:
-            train_dataset = referentialgame_datasets.DictDatasetWrapper(train_dataset)
+            train_dataset = DictDatasetWrapper(train_dataset)
     else:
         need_dict_wrapping = dataset_args.pop('need_dict_wrapping')
         for key in need_dict_wrapping:
-            mode2dataset[key] = referentialgame_datasets.DictDatasetWrapper(mode2dataset[key])
+            mode2dataset[key] = DictDatasetWrapper(mode2dataset[key])
         
         dataset_class = dataset_args.pop('dataset_class', None)
     
+        """
         if dataset_class is not None:
             Dataset = getattr(referentialgame_datasets, dataset_class)
-        
+        """
+        assert dataset_class=="DualLabeledDataset"
+
     rg_datasets = {}
     for mode in mode2dataset:
         if using_v2:
             dataset = dataset_args[mode].pop("modes")[mode]
             need_dict_wrapping = dataset_args[mode].pop('need_dict_wrapping')
             if mode in need_dict_wrapping:
-                dataset = referentialgame_datasets.DictDatasetWrapper(dataset)
+                dataset = DictDatasetWrapper(dataset)
             
             dataset_class = dataset_args[mode].pop('dataset_class', None)
             if dataset_class is not None:
-                Dataset = getattr(referentialgame_datasets, dataset_class)    
+                Dataset = DualLabeledDataset
+                #Dataset = getattr(referentialgame_datasets, dataset_class)    
         else:
             dataset = mode2dataset[mode]
 
