@@ -72,7 +72,7 @@ class DiscreteCombinedActionWrapper(gym.Wrapper):
             # this round_idx has NOT been updated yet,
             # thus it really describe the idx of the current round: 
             if player_idx==0\
-            or infos[player_idx]['round_idx']==1: 
+            or infos[player_idx]['round_idx']==infos[player_idx]["nbr_communication_rounds"]: 
                 # Everything actually available, except No-op:
                 legal_moves = list(range(self.action_space.n-1))
             
@@ -97,7 +97,8 @@ class DiscreteCombinedActionWrapper(gym.Wrapper):
         action_dicts = []
         for pidx in range(self.nbr_agent):
             pidx_a = action[pidx]
-
+            if isinstance(pidx_a, np.ndarray):  pidx_a = pidx_a.item()
+            
             if not self.action_space.contains(pidx_a):
                 raise ValueError('action {} is invalid for {}'.format(pidx_a, self.action_space))
 

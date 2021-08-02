@@ -136,7 +136,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         assert 'train' in self.datasets.keys()
         assert 'test' in self.datasets.keys()
         self.mode = 'train'
-
+        
+        self.nbr_communication_rounds = rg_config.get("nbr_communication_rounds",1)
         self.max_sentence_length = rg_config.get("max_sentence_length", 5)
         self.vocab_size = rg_config.get("vocab_size", 10)
         self.nbr_distractors = rg_config.get("nbr_distractors", 2)
@@ -167,7 +168,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.stimulus_observation_space = spaces.Box(
             low=-1,
             high=1,
-            shape=(self.nbr_distractors+1, rg_config.get('nbr_stimulus', 1), self.nbr_latents),
+            shape=((self.nbr_distractors+1)*rg_config.get('nbr_stimulus', 1)*self.nbr_latents, ),
             dtype=np.float32
         )
         self.communication_channel_observation_space = copy.deepcopy(self.communication_channel_action_space)
@@ -227,7 +228,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
     def _gen_obs_info(self, reset=False):
         if reset:
-            print("Create dataloader: ...")
+            self.datasets["train"].datasets["train"].reset()
+            self.datasets["test"].datasets["test"].reset()
+            
+            #print("Create dataloader: ...")
             """
             self.data_loaders = {}
             for mode, dataset in self.datasets.items():
@@ -240,7 +244,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
                     #num_workers=self.config['dataloader_num_worker']
                 )
             """
-            print("Create dataloader: OK.")
+            #print("Create dataloader: OK.")
 
             # Curriculum Distractors ?
             if self.rg_config.get('use_curriculum_nbr_distractors', False) \
@@ -303,7 +307,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         )["communication_channel"]
 
         speaker_obs = {
-            "stimulus":self.sample["speaker_experiences"],
+            "stimulus":self.sample["speaker_experiences"].reshape((-1,)),
             'communication_channel': speaker_observed_utterance,
             'other_agent_id': self.agent_ids[0],
             'role_id': self.role_ids[0],
@@ -312,7 +316,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         }
 
         listener_obs = {
-            "stimulus":self.sample["listener_experiences"],
+            "stimulus":self.sample["listener_experiences"].reshape((-1,)),
             'communication_channel': listener_observed_utterance,
             'other_agent_id': self.agent_ids[1],
             'role_id': self.role_ids[1],
@@ -322,7 +326,11 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
         self.observations = [speaker_obs, listener_obs]
 
-        info = {key:value for key, value in self.sample.items()}
+        info = {} #{key:value for key, value in self.sample.items()}
+        info['round_id'] = np.zeros((1,self.nbr_communication_rounds+1))
+        info['round_id'][0, self.round_idx] = 1
+
+        info['nbr_communication_rounds'] = self.nbr_communication_rounds
         info['round_idx'] = self.round_idx
         info['stimulus_idx'] = self.stimulus_idx
         info['step_idx'] = self.step_count
@@ -330,7 +338,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.infos = [copy.deepcopy(info) for _ in range(self.nbr_players)]
         
         # Bookkeeping: setting values for next call:
-        self.round_idx = (self.round_idx+1)%2
+        self.round_idx = (self.round_idx+1)%(self.nbr_communication_rounds+1)
 
         if self.round_idx==0:
             self.stimulus_idx = (self.stimulus_idx+1)%len(data_loader)
@@ -392,7 +400,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.agent_ids = []
         for pidx in range(self.nbr_players):
             # random values in [0, 1) :
-            pidx_ohe = self.np_random.random((self.id_length,))
+            pidx_ohe = self.np_random.random((1,self.id_length,))
             self.agent_ids.append(pidx_ohe)
 
         self.role_ids = []
@@ -402,8 +410,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             pidx_ohe[0, pidx] = 1
             self.role_ids.append(pidx_ohe)
 
-        self.previous_game_result = np.zeros(2)
-        self.previous_game_reward = np.zeros(1)
+        self.previous_game_result = np.zeros((1,2))
+        self.previous_game_reward = np.zeros((1,1))
         self.previous_game_was_successful = False
         
         # Return first observation
@@ -432,7 +440,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         reward = self._gen_reward()
         next_obs, next_infos = self._gen_obs_info()
         
-        return next_obs, reward, self.done, next_infos
+        return next_obs, [reward for _ in range(self.nbr_players)], self.done, next_infos
 
 
     def _gen_reward(self):
@@ -459,12 +467,12 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
             
         if self.round_idx==0:
-            self.previous_game_reward = np.ones(1)*reward 
-            self.previous_game_result = np.zeros(2)
+            self.previous_game_reward = np.ones((1,1))*reward 
+            self.previous_game_result = np.zeros((1,2))
             if self.previous_game_was_successful:
-                self.previous_game_result[1] = 1
+                self.previous_game_result[0,1] = 1
             else:
-                self.previous_game_result[0] = 1
+                self.previous_game_result[0,0] = 1
 
         return reward
 
@@ -475,7 +483,7 @@ def generate_receptive_constructive_test_env(**kwargs):
         rg_config = {
             "observability":            "full",
             "max_sentence_length":      kwargs.get("max_sentence_length",3),
-            "nbr_communication_round":  1,
+            "nbr_communication_rounds": kwargs.get("nbr_communication_rounds", 1),
             "nbr_distractors":          {"train":3, "test":3},
             "distractor_sampling":      'uniform',
             # Default: use 'uniform' or "similarity-0.5"

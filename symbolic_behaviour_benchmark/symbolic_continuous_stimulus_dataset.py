@@ -32,14 +32,16 @@ class SymbolicContinuousStimulusDataset:
         self.test_set_divider = 2
 
         self.prototype = prototype
-
-        self.reset()
-        self.imgs = [np.zeros((64,64,3))]
-
+        
         self.train = train
         self.transform = transform
         self.split_strategy = split_strategy
 
+        self.reset()
+
+    def reset_sampling(self):
+        self.imgs = [np.zeros((64,64,3))]
+        
         if self.split_strategy is not None:
             strategy = self.split_strategy.split('-')
             if 'divider' in self.split_strategy and 'offset' in self.split_strategy:
@@ -90,8 +92,8 @@ class SymbolicContinuousStimulusDataset:
         if self.prototype is not None:
             assert not(self.train)
             self.indices = [idx for idx in range(self.dataset_size) if idx not in self.prototype.indices]
-            print(f"Split Strategy: {self.split_strategy}")
-            print(f"Dataset Size: {len(self.indices)} out of {self.dataset_size} : {100*len(self.indices)/self.dataset_size}%.")
+            #print(f"Split Strategy: {self.split_strategy}")
+            #print(f"Dataset Size: {len(self.indices)} out of {self.dataset_size} : {100*len(self.indices)/self.dataset_size}%.")
 
         elif self.split_strategy is None or 'divider' in self.split_strategy:
             for idx in range(self.dataset_size):
@@ -104,8 +106,8 @@ class SymbolicContinuousStimulusDataset:
                 self.indices = self.indices[:end]
             else:
                 self.indices = self.indices[end:]
-            print(f"Split Strategy: {self.split_strategy} --> d {self.divider} / o {self.offset}")
-            print(f"Dataset Size: {len(self.indices)} out of {self.dataset_size}: {100*len(self.indices)/self.dataset_size}%.")
+            #print(f"Split Strategy: {self.split_strategy} --> d {self.divider} / o {self.offset}")
+            #print(f"Dataset Size: {len(self.indices)} out of {self.dataset_size}: {100*len(self.indices)/self.dataset_size}%.")
         elif 'combinatorial' in self.split_strategy:
             for idx in range(self.dataset_size):
                 object_centric_sidx = idx//self.nbr_object_centric_samples
@@ -157,13 +159,13 @@ class SymbolicContinuousStimulusDataset:
                     else:
                         continue
 
-            print(f"Split Strategy: {self.split_strategy}")
-            print(f"Dataset Size: {len(self.indices)} out of {self.dataset_size} : {100*len(self.indices)/self.dataset_size}%.")
+            #print(f"Split Strategy: {self.split_strategy}")
+            #print(f"Dataset Size: {len(self.indices)} out of {self.dataset_size} : {100*len(self.indices)/self.dataset_size}%.")
         else:
             raise NotImplementedError            
 
         self.targets = self.targets[self.indices]
-        print('Dataset loaded : OK.')
+        #print('Dataset loaded : OK.')
     
     def reset(self):
         global eps 
@@ -223,6 +225,8 @@ class SymbolicContinuousStimulusDataset:
         self.targets = np.zeros(self.dataset_size)
         for idx in range(self.dataset_size):
             self.targets[idx] = idx//self.nbr_object_centric_samples
+        
+        self.reset_sampling()
 
     def generate_object_centric_samples(self):
         """

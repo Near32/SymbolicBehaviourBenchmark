@@ -7,8 +7,9 @@ from symbolic_behaviour_benchmark.utils import wrappers
 
 
 def test_env(
+    nbr_communication_rounds=2,
     vocab_size=10,
-    max_sentence_length=5,
+    max_sentence_length=1,
     nbr_latents=2, 
     min_nbr_values_per_latent=4, 
     max_nbr_values_per_latent=5,
@@ -60,6 +61,7 @@ def test_env(
         "SymbolicBehaviourBenchmark-ReceptiveConstructiveTestEnv-v0", 
         #rg_config=rg_config,
         #train_dataset=train_dataset,
+        nbr_communication_rounds=nbr_communication_rounds,
         vocab_size=vocab_size,
         max_sentence_length=max_sentence_length,
         nbr_latents=nbr_latents,
@@ -78,10 +80,10 @@ def test_env(
     obs, info = env.reset()
     
     nb_possible_sentences = vocab_size**max_sentence_length
-    speaker_action = {'decision':0, 'communication_channel': np.ones(5)*3}
+    speaker_action = {'decision':0, 'communication_channel': np.ones(max_sentence_length)*3}
     #speaker_action = 0*nb_possible_sentences + 3**max_sentence_length
     speaker_action = dcaw_env._encode_action(speaker_action) 
-    listener_action = {'decision':2, 'communication_channel': np.ones(5)*2}
+    listener_action = {'decision':2, 'communication_channel': np.ones(max_sentence_length)*2}
     #listener_action = 2*nb_possible_sentences+2**max_sentence_length
     listener_action = dcaw_env._encode_action(listener_action)
     
@@ -89,14 +91,25 @@ def test_env(
 
     output = env.step(action=[speaker_action, listener_action])
 
-    speaker_action = {'decision':0, 'communication_channel': np.ones(5)*3}
+    speaker_action = {'decision':0, 'communication_channel': np.ones(max_sentence_length)*3}
     speaker_action = dcaw_env._encode_action(speaker_action) 
-    listener_action = {'decision':1, 'communication_channel': np.ones(5)*2}
+    listener_action = {'decision':1, 'communication_channel': np.ones(max_sentence_length)*2}
     listener_action = dcaw_env._encode_action(listener_action)
     
     import ipdb; ipdb.set_trace()
     
     foutput = env.step(action=[speaker_action, listener_action])
+
+    import ipdb; ipdb.set_trace()
+
+    speaker_action = {'decision':0, 'communication_channel': np.ones(max_sentence_length)*3}
+    speaker_action = dcaw_env._encode_action(speaker_action) 
+    listener_action = {'decision':1, 'communication_channel': np.ones(max_sentence_length)*2}
+    listener_action = dcaw_env._encode_action(listener_action)
+    
+    import ipdb; ipdb.set_trace()
+    
+    foutput1 = env.step(action=[speaker_action, listener_action])
 
     import ipdb; ipdb.set_trace()
 
