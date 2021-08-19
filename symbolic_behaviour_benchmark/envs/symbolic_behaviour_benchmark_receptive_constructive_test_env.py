@@ -327,6 +327,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.observations = [speaker_obs, listener_obs]
 
         info = {} #{key:value for key, value in self.sample.items()}
+        info["speaker_exp_latents"] = self.sample["speaker_exp_latents"].numpy()
+        info["listener_exp_latents"] = self.sample["listener_exp_latents"].numpy()
         info['round_id'] = np.zeros((1,self.nbr_communication_rounds+1))
         info['round_id'][0, self.round_idx] = 1
 

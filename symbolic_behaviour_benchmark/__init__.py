@@ -1,5 +1,6 @@
 from .envs import *
 from .utils import * 
+from .rule_based_agents import * 
 
 import gym
 from gym.envs.registration import register
