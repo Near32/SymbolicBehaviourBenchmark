@@ -15,3 +15,8 @@ register(
     id='SymbolicBehaviourBenchmark-ReceptiveConstructiveTestEnv-v0',
     entry_point='symbolic_behaviour_benchmark.envs:generate_receptive_constructive_test_env'
 )
+
+register(
+    id='SymbolicBehaviourBenchmark-ReceptiveConstructiveTestEnv-2Shots-v0',
+    entry_point='symbolic_behaviour_benchmark.envs:generate_receptive_constructive_test_env_2shots'
+)

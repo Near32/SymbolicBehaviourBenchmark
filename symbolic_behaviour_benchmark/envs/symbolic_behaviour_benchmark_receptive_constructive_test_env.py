@@ -126,6 +126,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         seed=1337,
         allow_listener_query=False,
         use_communication_channel_permutations=True,
+        nbr_shots=1,
         **kwargs,
     ):  
         super(SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv, self).__init__()
@@ -144,6 +145,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.nbr_latents = rg_config.get("nbr_latents", None)
         self.allow_listener_query = allow_listener_query
         self.use_communication_channel_permutations = use_communication_channel_permutations
+        self.nbr_shots = nbr_shots 
 
         # Actions consist of a dictionnary of two elements:
         # - decision that is discrete integer valued
@@ -259,8 +261,9 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
             # Which Dataloader ?
             self.dataloader_index = 0 
-            self.dataloader_index2mode = list(self.datasets.keys())
-            #self.dataloader_index2mode = list(self.data_loaders.keys())
+            #self.dataloader_index2mode = list(self.datasets.keys())
+            self.dataloader_index2mode = ['train' for _ in range(self.nbr_shots)]
+            self.dataloader_index2mode += ['test']
 
             # Which stimulus ?
             self.stimulus_idx = 0 
@@ -698,5 +701,9 @@ def generate_receptive_constructive_test_env(**kwargs):
     rg_config["nbr_latents"] = kwargs.get("nbr_latents",3)
 
     env = SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(**kwargs)
-    
+
     return env 
+
+def generate_receptive_constructive_test_env_2shots(**kwargs):
+    kwargs['nbr_shots'] = 2
+    return generate_receptive_constructive_test_env(**kwargs) 
