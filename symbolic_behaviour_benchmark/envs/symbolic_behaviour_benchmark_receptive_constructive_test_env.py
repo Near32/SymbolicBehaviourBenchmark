@@ -184,6 +184,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         )
         self.role_id_observation_space = spaces.MultiBinary(n=2)
         # role id : toggle index 0==speaker / 1==listener
+        
+        self.mode_id_observation_space = spaces.MultiBinary(n=2)
+        # mode id : toggle index between training/support==0 / test==1
+
 
         self.previous_game_reward_observation_space = spaces.Box(
             low=-10,
@@ -200,6 +204,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             'communication_channel': self.communication_channel_observation_space,
             'other_agent_id': self.other_agent_id_observation_space,
             'role_id': self.role_id_observation_space,
+            'mode_id': self.mode_id_observation_space,
             'previous_game_reward': self.previous_game_reward_observation_space,
             'previous_game_result': self.previous_game_result_observation_space,
         })
@@ -230,9 +235,14 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
     def _gen_obs_info(self, reset=False):
         if reset:
-            self.datasets["train"].datasets["train"].reset()
-            self.datasets["test"].datasets["test"].reset()
-            
+            #self.datasets["train"].datasets["train"].reset()
+            self.datasets['test'].reset()
+            # it is sufficient to reset the test duallabeled dataset
+            # because it contains both the training and testing dataset.
+            #self.datasets["test"].datasets["test"].reset()
+            # But do not forget to reset classes in the train dulalabeled dataset too:
+            self.datasets['train'].reset_classes()
+
             #print("Create dataloader: ...")
             """
             self.data_loaders = {}
@@ -259,13 +269,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             
             self.mode = "train"
 
-            # Which Dataloader ?
-            self.dataloader_index = 0 
-            #self.dataloader_index2mode = list(self.datasets.keys())
-            self.dataloader_index2mode = ['train' for _ in range(self.nbr_shots)]
-            self.dataloader_index2mode += ['test']
-
-            # Which stimulus ?
+                        # Which stimulus ?
             self.stimulus_idx = 0 
             self.round_idx = 0
             self.episode_ended = False
@@ -314,6 +318,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             'communication_channel': speaker_observed_utterance,
             'other_agent_id': self.agent_ids[0],
             'role_id': self.role_ids[0],
+            'mode_id': self.mode_ids[self.dataloader_index],
             'previous_game_reward': self.previous_game_reward,
             'previous_game_result': self.previous_game_result,
         }
@@ -323,6 +328,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             'communication_channel': listener_observed_utterance,
             'other_agent_id': self.agent_ids[1],
             'role_id': self.role_ids[1],
+            'mode_id': self.mode_ids[self.dataloader_index],
             'previous_game_reward': self.previous_game_reward,
             'previous_game_result': self.previous_game_result,
         }
@@ -339,6 +345,11 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         info['round_idx'] = self.round_idx
         info['stimulus_idx'] = self.stimulus_idx
         info['step_idx'] = self.step_count
+        info['mode'] = self.dataloader_index2mode[self.dataloader_index]+f"{self.dataloader_index if self.mode=='train' else ''}"
+        info['end_of_mode'] = (self.round_idx==self.nbr_communication_rounds and (self.stimulus_idx+1==len(data_loader)))
+        info['nbr_successes'] = self.racc[self.dataloader_index]['nbr_successes']
+        info['nbr_games'] = self.racc[self.dataloader_index]['nbr_games']
+        info['running_accuracy'] = self.racc[self.dataloader_index]['nbr_successes']*100.0/(self.racc[self.dataloader_index]['nbr_games']+1e-8)
         
         self.infos = [copy.deepcopy(info) for _ in range(self.nbr_players)]
         
@@ -415,6 +426,24 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             pidx_ohe[0, pidx] = 1
             self.role_ids.append(pidx_ohe)
 
+        # Which Dataloader ?
+        self.dataloader_index = 0 
+        #self.dataloader_index2mode = list(self.datasets.keys())
+        self.dataloader_index2mode = ['train' for _ in range(self.nbr_shots)]
+        self.dataloader_index2mode += ['test']
+        
+        self.racc = [{'nbr_successes':0, 'nbr_games':0} for _ in self.dataloader_index2mode]
+
+        self.mode_ids = []
+        # index 0==train / index 1==test:
+        for mode in self.dataloader_index2mode:
+            midx_ohe = np.zeros((1,2))
+            if mode=='train':
+                midx_ohe[0, 0] = 1
+            else:
+                midx_ohe[0, 1] = 1
+            self.mode_ids.append(midx_ohe)
+
         self.previous_game_result = np.zeros((1,2))
         self.previous_game_reward = np.zeros((1,1))
         self.previous_game_was_successful = False
@@ -470,7 +499,9 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
                 else:
                     reward = 0.0
 
-            
+            # accuracy bookkeeping:
+            self.racc[self.dataloader_index]['nbr_games'] += 1
+            self.racc[self.dataloader_index]['nbr_successes'] += int(self.previous_game_was_successful)
         if self.round_idx==0:
             self.previous_game_reward = np.ones((1,1))*reward 
             self.previous_game_result = np.zeros((1,2))
@@ -598,7 +629,6 @@ def generate_receptive_constructive_test_env(**kwargs):
         nbr_object_centric_samples=kwargs.get("nbr_object_centric_samples",1),
         prototype=train_dataset,
     )
-
 
     need_dict_wrapping = {}
 

@@ -12,7 +12,9 @@ class DualLabeledDataset(Dataset):
                             'test':kwargs['test_dataset']
                             }
         self.mode = kwargs['mode']
-
+        self.reset_classes()
+    
+    def reset_classes(self):
         self.train_classes = {}
         for idx in range(len(self.datasets['train'])):
             if hasattr(self.datasets['train'], 'getclass'):
@@ -41,7 +43,17 @@ class DualLabeledDataset(Dataset):
                 self.test_classes[cl].append(idx)
 
         self.nbr_classes = len(self.test_classes.keys())
-    
+
+    def reset(self):
+        # The ordering matters:
+        # reset train dataset first since
+        # the test dataset is relying on
+        # the train dataset as a prototype:
+        self.datasets["train"].reset()
+        self.datasets["test"].reset()
+
+        self.reset_classes()
+        
     def _get_class_from_idx(self, idx):
         dataset = self.datasets['train']
         sampling_idx = idx 
