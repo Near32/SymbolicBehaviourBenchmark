@@ -175,7 +175,7 @@ class SymbolicContinuousStimulusDataset:
             self.latent_sizes = []
             self.dataset_size = 1
             for l_idx in range(self.nbr_latents):
-                l_size = np.random.randint(low=self.min_nbr_values_per_latent, high=self.max_nbr_values_per_latent)
+                l_size = np.random.randint(low=self.min_nbr_values_per_latent, high=self.max_nbr_values_per_latent+1)
                 self.dataset_size *= l_size
                 self.latent_sizes.append(l_size)
                 self.latent_dims[l_idx] = {'size': l_size}
