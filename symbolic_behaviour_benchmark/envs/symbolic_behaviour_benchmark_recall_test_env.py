@@ -203,7 +203,7 @@ class SymbolicBehaviourBenchmark_RecallTestEnv(gym.Env):
         info['stimulus_idx'] = self.stimulus_idx
         info['step_idx'] = self.step_count
         info['mode'] = self.dataloader_index2mode[self.dataloader_index]+f"{self.dataloader_index if self.mode=='train' else ''}"
-        info['end_of_mode'] = (self.round_idx==1 and (self.stimulus_idx+1==len(data_loader)))
+        info['end_of_mode'] = (self.round_idx==1 and (self.stimulus_idx+1==self.dataloader_index2mode_length[self.dataloader_index])) #len(data_loader)))
         info['nbr_successes'] = self.racc[self.dataloader_index]['nbr_successes']
         info['nbr_games'] = self.racc[self.dataloader_index]['nbr_games']
         info['running_accuracy'] = self.racc[self.dataloader_index]['nbr_successes']*100.0/(self.racc[self.dataloader_index]['nbr_games']+1e-8)
