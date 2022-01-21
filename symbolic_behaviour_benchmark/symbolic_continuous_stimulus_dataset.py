@@ -172,14 +172,15 @@ class SymbolicContinuousStimulusDataset:
         self.trueidx2idx = dict(zip(self.indices,range(len(self.indices))))
 
         self.sampling_indices = None
-        if 'component-focused' in self.sampling_strategy:
+        if self.sampling_strategy is not None\
+        and 'component-focused' in self.sampling_strategy:
             """
             Expects: 'component-focused-Xshots'
             where X is an integer value representing
             the number of times each components but be seen.
             """
-            assert 'shots' in self.sampling_strategy
-            nbr_shots = int(self.sampling_strategy.split('-')[-1].split('shots')[0])
+            assert 'shot' in self.sampling_strategy
+            nbr_shots = int(self.sampling_strategy.split('-')[-1].split('shot')[0])
             """
             Starting with uniform distribution over all values, on each latent dim,
             the weights of the distribution are initialised at the number of shots,
@@ -252,9 +253,12 @@ class SymbolicContinuousStimulusDataset:
                     # Convert to sample's trueidx:
                     sampled_trueidx = self.coord2idx(coord)
                     # Record for sampling, iff valid trueidx:
+                    # Otherwise, we need to sample again...
                     if sampled_trueidx in self.trueidx2idx:
                         self.sampling_indices.append(self.trueidx2idx[sampled_trueidx])
-                
+                    else:
+                        continue
+
                     # Bookkeeping:
                     sampled_coord.append(coord)
 
@@ -288,10 +292,6 @@ class SymbolicContinuousStimulusDataset:
             pass
             #print(f"Sampling indices length: {len(self.sampling_indices)} out of {len(self.indices)} : {len(self.sampling_indices)/len(self.indices)*100} %.")
             #print(self.sampling_indices)
-        
-        else:
-            raise NotImplementedError
-
         #print('Dataset loaded : OK.')
 
     def reset(self):
@@ -460,7 +460,7 @@ class SymbolicContinuousStimulusDataset:
     
     def __len__(self) -> int:
         if self.sampling_indices is not None:
-            return len(self.sampling_indices)
+            return self.nbr_object_centric_samples*len(self.sampling_indices)
 
         return len(self.indices)
 
@@ -555,11 +555,8 @@ class SymbolicContinuousStimulusDataset:
                 - `"exp_latents_one_hot_encoded"`: Tensor representation of the latent of the experience in one-hot-encoded class form.
                 - `"exp_test_latent_mask"`: Tensor that highlights the presence of test values, if any on each latent axis.
         """
-        if idx >= len(self):
-            idx = idx%len(self)
-        
         if self.sampling_indices is not None:
-            idx = self.sampling_indices[idx]
+            idx = self.sampling_indices[idx//self.nbr_object_centric_samples]
             
         latent_class = self.getlatentclass(idx)
         stimulus = self.generate_object_centric_observations(latent_class.reshape((1,-1)))

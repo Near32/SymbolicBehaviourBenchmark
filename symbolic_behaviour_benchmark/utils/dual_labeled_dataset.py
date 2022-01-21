@@ -117,8 +117,10 @@ class DualLabeledDataset(Dataset):
 
         test = True
         not_enough_elements = False
+        already_sampling_from_all_classes = (from_class==None)
         while test:
             if from_class is None or not_enough_elements:
+                already_sampling_from_all_classes = True
                 from_class = set(classes.keys())
             
             # If object_centric, then make sure the distractors
@@ -164,9 +166,13 @@ class DualLabeledDataset(Dataset):
                 nbr_samples = 1
 
             if len(set_indices) < nbr_samples:
-                print("WARNING: Dataset's class has not enough element to choose from...")
-                print("WARNING: Using all the classes to sample...")
-                not_enough_elements = True
+                print(f"WARNING: Dataset's class has not enough element to choose from\
+                        given {nbr_samples} samples required to get some distractors.")
+                if not already_sampling_from_all_classes:
+                    print("WARNING: Using all the classes to sample...")
+                    not_enough_elements = True
+                else:
+                    raise Exception("Not enough elements to sample distractors and target from this dataset.")
             else:
                 test = False 
 

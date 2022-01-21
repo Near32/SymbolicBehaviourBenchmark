@@ -520,7 +520,7 @@ def generate_receptive_constructive_test_env(**kwargs):
             "observability":            "full",
             "max_sentence_length":      kwargs.get("max_sentence_length",3),
             "nbr_communication_rounds": kwargs.get("nbr_communication_rounds", 1),
-            "nbr_distractors":          {"train":3, "test":3},
+            "nbr_distractors":          {"train":kwargs.get("nbr_distractors", 1), "test":kwargs.get("nbr_distractors", 1)},
             "distractor_sampling":      'uniform',
             # Default: use 'uniform' or "similarity-0.5"
             # otherwise the emerging language 
