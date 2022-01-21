@@ -14,6 +14,7 @@ class SymbolicContinuousStimulusDataset:
         self, 
         train=True, 
         transform=None, 
+        sampling_strategy=None,
         split_strategy=None, 
         nbr_latents=10, 
         min_nbr_values_per_latent=2, 
@@ -21,6 +22,8 @@ class SymbolicContinuousStimulusDataset:
         nbr_object_centric_samples=1,
         prototype=None) :
         '''
+        :param sampling_stragey: str
+            e.g.: 'component-focused-5shots'
         :param split_strategy: str 
             e.g.: 'divider-10-offset-0'
         '''
@@ -35,6 +38,7 @@ class SymbolicContinuousStimulusDataset:
         
         self.train = train
         self.transform = transform
+        self.sampling_strategy = sampling_strategy
         self.split_strategy = split_strategy
 
         self.reset()
@@ -124,7 +128,6 @@ class SymbolicContinuousStimulusDataset:
                     remainder = (dim_class+1)%dim_dict['divider']
                     if remainder!=dim_dict['remainder_use']:
                         skip_it = True
-                        break
 
                     if dim_dict['primitive']:
                         ordinal = quotient
@@ -165,8 +168,132 @@ class SymbolicContinuousStimulusDataset:
             raise NotImplementedError            
 
         self.targets = self.targets[self.indices]
+        
+        self.trueidx2idx = dict(zip(self.indices,range(len(self.indices))))
+
+        self.sampling_indices = None
+        if 'component-focused' in self.sampling_strategy:
+            """
+            Expects: 'component-focused-Xshots'
+            where X is an integer value representing
+            the number of times each components but be seen.
+            """
+            assert 'shots' in self.sampling_strategy
+            nbr_shots = int(self.sampling_strategy.split('-')[-1].split('shots')[0])
+            """
+            Starting with uniform distribution over all values, on each latent dim,
+            the weights of the distribution are initialised at the number of shots,
+            plus one for regularisation purposes.
+            We aim to sample indices using a building loop.
+            This building loop goes through all latent dimensions 
+            and sample a value according to the weights.
+            Upon sampling a value, the corresponding weights is then decreased by one.
+            This ensures that all values that needs to be sampled to be seen the correct
+            number of shots retain high likelihood of being sampled.
+            """
+            step_size = 100.0
+            per_latent_value_weights = {
+                lidx: [(nbr_shots+1)*step_size for vidx in range(ld['size'])]
+                for lidx, ld in self.latent_dims.items()
+            }
+            
+            """
+            It may be possible that the structure does not accomodate
+            the number of shots for each component.
+            Thus, we need to allow for replacement when sampling coords below,
+            at training time, or simply sampling everything, at test time.
+            """
+            allow_replacement = False
+            nbr_trials_before_accepting_replacement = 5
+            need_sampling = True
+            # very rough estimation of the minimum number of samples needed:
+            # ... assuming incorrectly that when sampling for one value, it does not already
+            # gives us samples for some other values on other latent dimensions...
+            min_nbr_samples = nbr_shots*sum([ld['size'] for ld in self.latent_dims.values()])
+            if min_nbr_samples > len(self.indices):
+                if self.train:
+                    allow_replacement = True
+                else:
+                    self.sampling_indices = list(range(len(self.indices)))
+                    need_sampling = False
+            
+            if need_sampling:
+                self.sampling_indices = []
+                
+                done = False
+                sampled_coord = []
+                nbr_trials = 0
+                while not done:
+                    coord = np.zeros(self.nbr_latents)
+                    for lidx, vws in per_latent_value_weights.items():
+                        norm = sum(vws)
+                        probs = [vw/norm for vw in vws]
+                        sampled_vidx = np.random.choice(
+                            a=np.arange(len(vws)),
+                            size=1,
+                            p=probs,
+                        )
+                    
+                        coord[lidx] = sampled_vidx 
+                
+                    # Check that we have not already sampled it:
+                    same = len(sampled_coord) and any([all(coord==c) for c in sampled_coord])
+                    if same \
+                    and not allow_replacement:
+                        continue
+                    elif same \
+                    and allow_replacement:
+                        if nbr_trials < nbr_trials_before_accepting_replacement:
+                            nbr_trials += 1
+                            continue
+                        else:
+                            nbr_trials = 0
+                    
+                    # Convert to sample's trueidx:
+                    sampled_trueidx = self.coord2idx(coord)
+                    # Record for sampling, iff valid trueidx:
+                    if sampled_trueidx in self.trueidx2idx:
+                        self.sampling_indices.append(self.trueidx2idx[sampled_trueidx])
+                
+                    # Bookkeeping:
+                    sampled_coord.append(coord)
+
+                    for lidx, sampled_vidx in enumerate(coord):
+                        # Decreasing likelihood of this value for next runs:
+                        vw = per_latent_value_weights[lidx]
+                        
+                        # ...but keep a minimum probability of sampling.
+                        # Otherwise, we might find ourselves in the situation
+                        # where we still need to sample values from one latent
+                        # dimension while all the other latent dimensions have
+                        # their weight distributions at 0...
+                        
+                        per_latent_value_weights[lidx][int(sampled_vidx)] = max(
+                            step_size,
+                            vw[int(sampled_vidx)]-step_size,
+                        )
+                    
+                     
+                    # Are we done?
+                    # i.e. are all the weights distr equal to their final value: step_size?
+                    done = True
+                    for lidx, vw in per_latent_value_weights.items():
+                        if sum(vw)/len(vw) > step_size:
+                            done = False
+                            break
+            else:
+                pass
+                #print(f"WARNING: Sampling was not performed due to not enough available stimulus.")
+
+            pass
+            #print(f"Sampling indices length: {len(self.sampling_indices)} out of {len(self.indices)} : {len(self.sampling_indices)/len(self.indices)*100} %.")
+            #print(self.sampling_indices)
+        
+        else:
+            raise NotImplementedError
+
         #print('Dataset loaded : OK.')
-    
+
     def reset(self):
         global eps 
 
@@ -298,6 +425,13 @@ class SymbolicContinuousStimulusDataset:
     def coord2idx(self, coord):
         """
         WARNING: the object-centrism is not taken into account here.
+        I.e. in order to obtain a stimulus from the :return idx: value,
+        it is necessary to:
+            - retrieve the latentclass from this index (using getlatentclass),
+            - and call the method generate_object_centric_observations with the
+                retrieved latentclass as input.
+        The object-centric observations is sampled randomly in the 
+        generate_object_centric_observations method.
 
         :arg coord: List of self.nbr_latents elements.        
         
@@ -310,7 +444,7 @@ class SymbolicContinuousStimulusDataset:
 
     def idx2coord(self, idx):
         """
-        WARNING: the object-centrism MUST be taking into account
+        WARNING: the object-centrism MUST be taken into account
         before calling this function.
 
         :arg idx: Int, must be contained within [0, self.dataset_size/self.nbr_object_centric_samples].
@@ -325,17 +459,18 @@ class SymbolicContinuousStimulusDataset:
         return coord 
     
     def __len__(self) -> int:
+        if self.sampling_indices is not None:
+            return len(self.sampling_indices)
+
         return len(self.indices)
 
     def getclass(self, idx):
-        if idx >= len(self):
-            idx = idx%len(self)
+        idx = idx%len(self.indices)
         target = self.targets[idx]
         return target
 
     def getlatentvalue(self, idx):
-        if idx >= len(self):
-            idx = idx%len(self)
+        idx = idx%len(self.indices)
         trueidx = self.indices[idx]
         object_centric_sidx = trueidx//self.nbr_object_centric_samples
         coord = self.idx2coord(object_centric_sidx)
@@ -344,8 +479,7 @@ class SymbolicContinuousStimulusDataset:
         return latent_value
 
     def getlatentclass(self, idx):
-        if idx >= len(self):
-            idx = idx%len(self)
+        idx = idx%len(self.indices)
         trueidx = self.indices[idx]
         object_centric_sidx = trueidx//self.nbr_object_centric_samples
         coord = self.idx2coord(object_centric_sidx)
@@ -353,8 +487,6 @@ class SymbolicContinuousStimulusDataset:
         return latent_class
 
     def getlatentonehot(self, idx):
-        if idx >= len(self):
-            idx = idx%len(self)
         # object-centrism is taken into account in getlatentclass fn:
         latent_class = self.getlatentclass(idx)
         latent_one_hot_encoded = np.zeros(sum(self.latent_sizes))
@@ -365,8 +497,7 @@ class SymbolicContinuousStimulusDataset:
         return latent_one_hot_encoded
 
     def gettestlatentmask(self, idx):
-        if idx >= len(self):
-            idx = idx%len(self)
+        idx = idx%len(self.indices)
         trueidx = self.indices[idx]
         test_latents_mask = self.test_latents_mask[trueidx]
         return test_latents_mask
@@ -426,7 +557,10 @@ class SymbolicContinuousStimulusDataset:
         """
         if idx >= len(self):
             idx = idx%len(self)
-
+        
+        if self.sampling_indices is not None:
+            idx = self.sampling_indices[idx]
+            
         latent_class = self.getlatentclass(idx)
         stimulus = self.generate_object_centric_observations(latent_class.reshape((1,-1)))
         

@@ -611,6 +611,7 @@ def generate_receptive_constructive_test_env(**kwargs):
         train_dataset = SymbolicContinuousStimulusDataset(
             train=True,
             transform=None,
+            sampling_strategy=kwargs.get("sampling_strategy", None),
             split_strategy='combinatorial2-40',
             nbr_latents=kwargs.get("nbr_latents",3),
             min_nbr_values_per_latent=kwargs.get("min_nbr_values_per_latent",2),
@@ -622,6 +623,7 @@ def generate_receptive_constructive_test_env(**kwargs):
     test_dataset = SymbolicContinuousStimulusDataset(
         train=False,
         transform=None,
+        sampling_strategy=kwargs.get("sampling_strategy", None),
         split_strategy='combinatorial2-40',
         nbr_latents=kwargs.get("nbr_latents",3),
         min_nbr_values_per_latent=kwargs.get("min_nbr_values_per_latent",2),
