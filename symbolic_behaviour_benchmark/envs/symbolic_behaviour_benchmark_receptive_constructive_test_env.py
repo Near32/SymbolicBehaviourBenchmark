@@ -125,6 +125,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         datasets:Dict[str,DualLabeledDataset],
         seed=1337,
         allow_listener_query=False,
+        provide_listener_feedback=False,
         use_communication_channel_permutations=True,
         nbr_shots=1,
         **kwargs,
@@ -146,11 +147,15 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.allow_listener_query = allow_listener_query
         self.use_communication_channel_permutations = use_communication_channel_permutations
         self.nbr_shots = nbr_shots 
+        self.listener_feedback = provide_listener_feedback
+        self.feedback_provided = False
 
         # Actions consist of a dictionnary of two elements:
         # - decision that is discrete integer valued
         # - communication channel that consist of ungrounded tokens, represented as integer values.
-        self.decision_space = spaces.Discrete(self.nbr_distractors+1)
+        nbr_decisions = self.nbr_distractors+1
+        if rg_config.get('descriptive', False): nbr_decisions += 1
+        self.decision_space = spaces.Discrete(nbr_decisions)
         self.communication_channel_action_space = CommunicationChannel(
             max_sentence_length=self.max_sentence_length,
             vocab_size=self.vocab_size
@@ -332,14 +337,15 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             'previous_game_reward': self.previous_game_reward,
             'previous_game_result': self.previous_game_result,
         }
-
-        self.observations = [speaker_obs, listener_obs]
+        
 
         info = {} #{key:value for key, value in self.sample.items()}
         info["speaker_exp_latents"] = self.sample["speaker_exp_latents"].numpy()
         info["listener_exp_latents"] = self.sample["listener_exp_latents"].numpy()
         info['round_id'] = np.zeros((1,self.nbr_communication_rounds+1))
-        info['round_id'][0, self.round_idx] = 1
+        
+        if self.round_idx>=0:
+            info['round_id'][0, self.round_idx] = 1
 
         info['nbr_communication_rounds'] = self.nbr_communication_rounds
         info['round_idx'] = self.round_idx
@@ -351,11 +357,26 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         info['nbr_games'] = self.racc[self.dataloader_index]['nbr_games']
         info['running_accuracy'] = self.racc[self.dataloader_index]['nbr_successes']*100.0/(self.racc[self.dataloader_index]['nbr_games']+1e-8)
         
+        if self.listener_feedback\
+        and self.round_idx==-1\
+        and not self.feedback_provided:
+            listener_obs['stimulus'] = copy.deepcopy(speaker_obs['stimulus'])
+            info["listener_exp_latents"] = copy.deepcopy(info["speaker_exp_latents"]) 
+            self.feedback_provided = True
+        else:
+            self.feedback_provided = False 
+
+        self.observations = [speaker_obs, listener_obs]
         self.infos = [copy.deepcopy(info) for _ in range(self.nbr_players)]
         
         # Bookkeeping: setting values for next call:
         self.round_idx = (self.round_idx+1)%(self.nbr_communication_rounds+1)
-
+        
+        if self.listener_feedback\
+        and self.round_idx==0:
+            if not self.feedback_provided:
+                self.round_idx = -1
+                
         if self.round_idx==0:
             self.stimulus_idx = (self.stimulus_idx+1)%len(data_loader)
 
@@ -484,7 +505,11 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         """
         reward = 0.0
 
-        if self.round_idx==0:
+        round_idx_reward = 0
+        if self.listener_feedback:
+            round_idx_reward = -1
+
+        if self.round_idx==round_idx_reward:
             # then we have just received the listener's decision:
             if self.listener_actions["decision"] == self.sample["target_decision_idx"].item():
                 self.previous_game_was_successful = True 
@@ -502,7 +527,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             # accuracy bookkeeping:
             self.racc[self.dataloader_index]['nbr_games'] += 1
             self.racc[self.dataloader_index]['nbr_successes'] += int(self.previous_game_was_successful)
-        if self.round_idx==0:
+        
+        if self.round_idx==round_idx_reward:
             self.previous_game_reward = np.ones((1,1))*reward 
             self.previous_game_result = np.zeros((1,2))
             if self.previous_game_was_successful:
@@ -529,7 +555,7 @@ def generate_receptive_constructive_test_env(**kwargs):
             # a word that is relevant to the class/label
             # of the target, seemingly.  
 
-            "descriptive":              False,
+            "descriptive":              kwargs.get('descriptive', False),
             "descriptive_target_ratio": 0.5,
 
             "object_centric":           kwargs.get("nbr_object_centric_samples",1)>1,

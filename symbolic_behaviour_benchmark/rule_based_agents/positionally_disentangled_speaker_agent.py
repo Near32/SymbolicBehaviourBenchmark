@@ -62,7 +62,10 @@ class PositionallyDisentangledSpeakerAgent(object):
             """
             self.action_dict = self._utter(state=state, infos=infos)
         
-        if self.round_idx!=self.nbr_communication_rounds:
+        # If listener feedback is provided, then round_idx can
+        # be equal to -1, we need to guard against it:
+        if self.round_idx>=0\
+        and self.round_idx!=self.nbr_communication_rounds:
             comm_chan_reg_action_dict = self._reg_comm_chan(self.action_dict)
         else:
             comm_chan_reg_action_dict = {

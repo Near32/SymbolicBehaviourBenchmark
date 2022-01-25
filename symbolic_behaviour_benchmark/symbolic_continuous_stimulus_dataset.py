@@ -464,7 +464,14 @@ class SymbolicContinuousStimulusDataset:
 
         return len(self.indices)
 
-    def getclass(self, idx):
+    def getclass(self, idx=None, sidx=None):
+        assert idx is not None or sidx is not None
+        if idx is not None\
+        and self.sampling_indices is not None:
+            idx = self.sampling_indices[idx//self.nbr_object_centric_samples]
+        elif sidx is not None:
+            # sampling idx is provided already:
+            idx = sidx
         idx = idx%len(self.indices)
         target = self.targets[idx]
         return target
@@ -561,7 +568,10 @@ class SymbolicContinuousStimulusDataset:
         latent_class = self.getlatentclass(idx)
         stimulus = self.generate_object_centric_observations(latent_class.reshape((1,-1)))
         
-        target = self.getclass(idx)
+        if self.sampling_indices is not None:
+            target = self.getclass(sidx=idx)
+        else:
+            target = self.getclass(idx)
         latent_value = self.getlatentvalue(idx)
         latent_one_hot_encoded = self.getlatentonehot(idx)
         test_latents_mask = self.gettestlatentmask(idx)
