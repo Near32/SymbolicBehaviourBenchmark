@@ -205,8 +205,14 @@ class SymbolicContinuousStimulusDataset:
             at training time, or simply sampling everything, at test time.
             """
             allow_replacement = False
+            nbr_trials_threshold = 10
             nbr_trials_before_accepting_replacement = 5
             need_sampling = True
+
+            valid_coords = np.stack(
+                [self.idx2coord(trueidx//self.nbr_object_centric_samples) for trueidx in self.indices],
+                axis=0,
+            )
             # very rough estimation of the minimum number of samples needed:
             # ... assuming incorrectly that when sampling for one value, it does not already
             # gives us samples for some other values on other latent dimensions...
@@ -241,6 +247,10 @@ class SymbolicContinuousStimulusDataset:
                     same = len(sampled_coord) and any([all(coord==c) for c in sampled_coord])
                     if same \
                     and not allow_replacement:
+                        nbr_trials += 1
+                        if nbr_trials > nbr_trials_threshold:
+                            allow_replacement = True
+                            nbr_trials = 0
                         continue
                     elif same \
                     and allow_replacement:
@@ -257,8 +267,23 @@ class SymbolicContinuousStimulusDataset:
                     if sampled_trueidx in self.trueidx2idx:
                         self.sampling_indices.append(self.trueidx2idx[sampled_trueidx])
                     else:
-                        continue
-
+                        # let us sample the coord among the valid ones
+                        # that resembles the most this one:
+                        coord_l2_dists = np.square(10.0*(valid_coords-coord))
+                        coord_weights = 1.0/(coord_l2_dists.sum(axis=-1)+1.0e-3)
+                        norm = coord_weights.sum()
+                        probs = [cw/norm for cw in coord_weights]
+                        # inversely proportional to the distance:
+                        replacement_idx = np.random.choice(
+                            a=len(probs),
+                            size=1,
+                            p=probs,
+                        ).item()
+                        #replacement_trueidx = self.indices[replacement_idx]
+                        #self.sampling_indices.append(self.trueidx2idx[replacement_trueidx])
+                        self.sampling_indices.append(replacement_idx)
+                        coord = valid_coords[replacement_idx]
+                        
                     # Bookkeeping:
                     sampled_coord.append(coord)
 

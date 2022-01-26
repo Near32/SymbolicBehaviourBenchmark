@@ -135,6 +135,7 @@ class Dataset(torchDataset):
             if not retain_target:
                 # Sample a new element for the listener to consider.
                 # Different from the target element in itself, but also in its class:
+                
                 new_target_for_listener_sample_d = self.sample(
                     idx=None, 
                     from_class=from_class, 

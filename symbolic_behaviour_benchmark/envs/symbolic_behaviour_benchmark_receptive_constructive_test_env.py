@@ -131,7 +131,6 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         **kwargs,
     ):  
         super(SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv, self).__init__()
-
         self.nbr_players = 2
         self.rg_config = rg_config
         self.datasets = datasets

@@ -172,7 +172,7 @@ class DualLabeledDataset(Dataset):
                     print("WARNING: Using all the classes to sample...")
                     not_enough_elements = True
                 else:
-                    raise Exception("Not enough elements to sample distractors and target from this dataset.")
+                    raise Exception(f"Not enough elements to sample distractors and target from this dataset: nbr samples = {nbr_samples}.")
             else:
                 test = False 
 
