@@ -25,7 +25,11 @@ class PositionallyDisentangledSpeakerAgent(object):
     
     def _reg_comm_chan(self, action_dict:Dict[str,np.ndarray])->Dict[str,np.ndarray]:
         comm_chan_reg_action_dict = copy.deepcopy(action_dict)
-        comm_chan_reg_action_dict['communication_channel'] = action_dict['communication_channel'][0,self.round_idx:self.round_idx+self.max_sentence_length]
+        if self.nbr_communication_rounds>1:
+            comm_chan_reg_action_dict['communication_channel'] = action_dict['communication_channel'][0,self.round_idx:self.round_idx+self.max_sentence_length]
+        else:
+            # We repeat what have been said
+            comm_chan_reg_action_dict['communication_channel'] = action_dict['communication_channel'][0,0:self.max_sentence_length]
         return comm_chan_reg_action_dict
     
     def _utter(
@@ -62,10 +66,22 @@ class PositionallyDisentangledSpeakerAgent(object):
             """
             self.action_dict = self._utter(state=state, infos=infos)
         
+        # PREVIOUSY:
         # If listener feedback is provided, then round_idx can
         # be equal to -1, we need to guard against it:
+        """
         if self.round_idx>=0\
         and self.round_idx!=self.nbr_communication_rounds:
+            comm_chan_reg_action_dict = self._reg_comm_chan(self.action_dict)
+        else:
+            comm_chan_reg_action_dict = {
+                "communication_channel":np.zeros((1, self.max_sentence_length)),
+                "decision":np.zeros((1,1)),
+            }
+        """
+        # NOW:
+        # let the speaker provide a sentence at every possible timestep:
+        if self.round_idx>=0:
             comm_chan_reg_action_dict = self._reg_comm_chan(self.action_dict)
         else:
             comm_chan_reg_action_dict = {

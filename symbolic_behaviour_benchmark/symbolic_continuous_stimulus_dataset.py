@@ -167,8 +167,15 @@ class SymbolicContinuousStimulusDataset:
         else:
             raise NotImplementedError            
 
+        """
+        self.targets contains stimulus-centric indices as keys:
+        """
         self.targets = self.targets[self.indices]
         
+        """
+        self.trueidx2idx expects stimulus-centric indices both as keys and values,
+        as self.indices.
+        """
         self.trueidx2idx = dict(zip(self.indices,range(len(self.indices))))
 
         self.sampling_indices = None
@@ -177,7 +184,7 @@ class SymbolicContinuousStimulusDataset:
             """
             Expects: 'component-focused-Xshots'
             where X is an integer value representing
-            the number of times each components but be seen.
+            the number of times each component value must be seen.
             """
             assert 'shot' in self.sampling_strategy
             nbr_shots = int(self.sampling_strategy.split('-')[-1].split('shot')[0])
@@ -188,9 +195,9 @@ class SymbolicContinuousStimulusDataset:
             We aim to sample indices using a building loop.
             This building loop goes through all latent dimensions 
             and sample a value according to the weights.
-            Upon sampling a value, the corresponding weights is then decreased by one.
-            This ensures that all values that needs to be sampled to be seen the correct
-            number of shots retain high likelihood of being sampled.
+            Upon sampling a component value, the corresponding weight is then decreased by one.
+            This ensures that all values, that needs to be sampled in order to be seen the correct
+            number of shots, retain high likelihood of being sampled.
             """
             step_size = 100.0
             per_latent_value_weights = {
@@ -209,6 +216,11 @@ class SymbolicContinuousStimulusDataset:
             nbr_trials_before_accepting_replacement = 5
             need_sampling = True
 
+            """
+            self.indices is expecting stimulus-centric indices both as keys and values.
+            The method self.idx2coord is expecting object-centric indices.
+            Thus, many coords in valid_coords are the same, but are indexed via stimulus-centric indices...
+            """
             valid_coords = np.stack(
                 [self.idx2coord(trueidx//self.nbr_object_centric_samples) for trueidx in self.indices],
                 axis=0,
@@ -261,10 +273,16 @@ class SymbolicContinuousStimulusDataset:
                             nbr_trials = 0
                     
                     # Convert to sample's trueidx:
-                    sampled_trueidx = self.coord2idx(coord)
+                    sampled_obj_centric_trueidx = self.coord2idx(coord)
+                    # sampled_obj_centric_trueidx is an object-centric index...
+                    sampled_trueidx = sampled_obj_centric_trueidx*self.nbr_object_centric_samples + random.randint(0, self.nbr_object_centric_samples)
                     # Record for sampling, iff valid trueidx:
                     # Otherwise, we need to sample again...
                     if sampled_trueidx in self.trueidx2idx:
+                        """
+                        self.sampling_indices should expect stimulus-centric indices
+                        both as keys and values.
+                        """
                         self.sampling_indices.append(self.trueidx2idx[sampled_trueidx])
                     else:
                         # let us sample the coord among the valid ones
@@ -281,6 +299,12 @@ class SymbolicContinuousStimulusDataset:
                         ).item()
                         #replacement_trueidx = self.indices[replacement_idx]
                         #self.sampling_indices.append(self.trueidx2idx[replacement_trueidx])
+                        """
+                        self.sampling_indices should expect stimulus-centric indices.
+                        As valid_coords is made up of object-centric coords, and indexed with
+                        stimulus-centric indices, replacement_idx is chosen among stimulus-centric
+                        indices, giving equal likelihood to same ranges of object-centric indices...
+                        """
                         self.sampling_indices.append(replacement_idx)
                         coord = valid_coords[replacement_idx]
                         
@@ -321,7 +345,7 @@ class SymbolicContinuousStimulusDataset:
 
     def reset(self):
         global eps 
-
+        
         if self.prototype is None:
             self.latent_dims = {}
             self.latent_sizes = []
@@ -375,6 +399,10 @@ class SymbolicContinuousStimulusDataset:
             self.test_latents_mask = self.prototype.test_latents_mask
 
         self.targets = np.zeros(self.dataset_size)
+        """
+        self.targets contains stimulus-centric indices,
+        and the targets/values correspond to the object-centric indices.
+        """
         for idx in range(self.dataset_size):
             self.targets[idx] = idx//self.nbr_object_centric_samples
         
@@ -460,7 +488,7 @@ class SymbolicContinuousStimulusDataset:
 
         :arg coord: List of self.nbr_latents elements.        
         
-        :return idx: Int, corresponding index.
+        :return idx: Integer, corresponding stimulus-centric index.
         """
         idx = 0
         for stride, mult in zip(self.latent_strides,coord):
@@ -472,7 +500,8 @@ class SymbolicContinuousStimulusDataset:
         WARNING: the object-centrism MUST be taken into account
         before calling this function.
 
-        :arg idx: Int, must be contained within [0, self.dataset_size/self.nbr_object_centric_samples].
+        :arg idx: Integer representing an object-centric index,
+                    i.e. must be contained within [0, self.dataset_size/self.nbr_object_centric_samples].
 
         :return coord: List of self.nbr_latents elements corresponding the entry of :arg idx:.
         """
@@ -485,15 +514,27 @@ class SymbolicContinuousStimulusDataset:
     
     def __len__(self) -> int:
         if self.sampling_indices is not None:
-            return self.nbr_object_centric_samples*len(self.sampling_indices)
+            return len(self.sampling_indices)
+            #return self.nbr_object_centric_samples*len(self.sampling_indices)
 
         return len(self.indices)
 
     def getclass(self, idx=None, sidx=None):
+        """
+        :param idx: Integer representing the stimulus index.
+                    If self.sampling_indices is not None, i.e. if using
+                    'component-focused'-based sampling strategy,
+                    then it is assumed that self.sampling_indices contains
+                    stimulus-centric indices as keys and values, and 
+                    self.targets containing stimulus-centric indices as keys.
+        :param sidx: Integer representing the object-centric stimulus index,
+                    i.e. divided by self.nbr_object_centric_samples already.
+        """
         assert idx is not None or sidx is not None
         if idx is not None\
         and self.sampling_indices is not None:
-            idx = self.sampling_indices[idx//self.nbr_object_centric_samples]
+            #idx = self.sampling_indices[idx//self.nbr_object_centric_samples]
+            idx = self.sampling_indices[idx]
         elif sidx is not None:
             # sampling idx is provided already:
             idx = sidx
@@ -588,15 +629,28 @@ class SymbolicContinuousStimulusDataset:
                 - `"exp_test_latent_mask"`: Tensor that highlights the presence of test values, if any on each latent axis.
         """
         if self.sampling_indices is not None:
-            idx = self.sampling_indices[idx//self.nbr_object_centric_samples]
+            """
+            PREVIOUSLY:
+            self.sampling_indices is assuming object-centric indices as keys,
+            and stimulus-centric indices as values, stimulus-centric indices 
+            are expected by self.getlatentclass method.
+            NOW: self.sampling_indices uses stimulus-centric indices as keys 
+            and values.
+            """
+            #idx = self.sampling_indices[idx//self.nbr_object_centric_samples]
+            idx = self.sampling_indices[idx]
             
         latent_class = self.getlatentclass(idx)
         stimulus = self.generate_object_centric_observations(latent_class.reshape((1,-1)))
-        
+       
+        # PREVIOUSLY: regularised getclass expectations?
+        # now expecting stimulus-centric values, but still
+        # acknowledging that it is a sampled index...
         if self.sampling_indices is not None:
             target = self.getclass(sidx=idx)
         else:
             target = self.getclass(idx)
+        
         latent_value = self.getlatentvalue(idx)
         latent_one_hot_encoded = self.getlatentonehot(idx)
         test_latents_mask = self.gettestlatentmask(idx)

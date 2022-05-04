@@ -5,11 +5,9 @@ from .rule_based_agents import *
 import gym
 from gym.envs.registration import register
 
-env_dict = gym.envs.registration.registry.env_specs.copy()
-
-for env in env_dict:
-    if 'SymbolicBehaviourBenchmark' in env:
-        del gym.envs.registration.registry.env_specs[env]
+for env_k in gym.envs.registration.registry.env_specs.keys():
+    if 'SymbolicBehaviourBenchmark' in env_k:
+        del gym.envs.registration.registry.env_specs[env_k]
 
 register(
     id='SymbolicBehaviourBenchmark-ReceptiveConstructiveTestEnv-v0',

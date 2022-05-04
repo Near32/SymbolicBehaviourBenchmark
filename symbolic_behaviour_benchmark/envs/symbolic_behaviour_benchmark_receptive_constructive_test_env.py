@@ -277,6 +277,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             self.stimulus_idx = 0 
             self.round_idx = 0
             self.episode_ended = False
+            self.episode_ends = False 
 
         it_dataset = self.dataloader_index
         #data_loader = self.data_loaders[self.dataloader_index2mode[self.dataloader_index]]
@@ -285,14 +286,16 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         if self.round_idx==0\
         and not self.episode_ended:
                 self.sample = data_loader[self.stimulus_idx]
-
-        if self.episode_ended \
-        and self.round_idx==0 \
-        and self.dataloader_index>=(len(self.dataloader_index2mode)-1):
+        
+        # When providing feedback to listener,
+        # we end the episode on the feedback timestep:
+        if (self.episode_ended and self.round_idx==0)\
+        or (self.episode_ends and self.round_idx==-1):
+            #and self.dataloader_index>=(len(self.dataloader_index2mode)-1):
             self.done = True
         else:
             self.done = False  
-
+        
         if self.allow_listener_query:
             speaker_observed_utterance = self.communication_history["listener"][-1]
             # need to decode it from listener viewpoint:
@@ -316,7 +319,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         listener_observed_utterance = self.per_player_permutation[1].encode_obs(
             {'communication_channel':listener_observed_utterance}
         )["communication_channel"]
-
+        
         speaker_obs = {
             "stimulus":self.sample["speaker_experiences"].reshape((-1,)),
             'communication_channel': speaker_observed_utterance,
@@ -351,7 +354,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         info['stimulus_idx'] = self.stimulus_idx
         info['step_idx'] = self.step_count
         info['mode'] = self.dataloader_index2mode[self.dataloader_index]+f"{self.dataloader_index if self.mode=='train' else ''}"
-        info['end_of_mode'] = (self.round_idx==self.nbr_communication_rounds and (self.stimulus_idx+1==len(data_loader)))
+        last_round = self.round_idx==self.nbr_communication_rounds if not(self.listener_feedback) else self.round_idx == -1 
+        info['end_of_mode'] = (last_round and (self.stimulus_idx+1==len(data_loader)))
         info['nbr_successes'] = self.racc[self.dataloader_index]['nbr_successes']
         info['nbr_games'] = self.racc[self.dataloader_index]['nbr_games']
         info['running_accuracy'] = self.racc[self.dataloader_index]['nbr_successes']*100.0/(self.racc[self.dataloader_index]['nbr_games']+1e-8)
@@ -385,7 +389,11 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             
                 if self.dataloader_index==0:
                     self.episode_ended = True
-        
+        elif self.round_idx==-1:
+            if self.stimulus_idx == (len(data_loader)-1)\
+            and self.dataloader_index == (len(self.dataloader_index2mode)-1):
+                self.episode_ends = True
+
         return self.observations, self.infos
 
         """

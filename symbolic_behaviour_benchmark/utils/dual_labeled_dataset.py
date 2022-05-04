@@ -33,7 +33,7 @@ class DualLabeledDataset(Dataset):
                 _, cl = self.datasets['test'][idx]
             if cl not in self.test_classes: self.test_classes[cl] = []
             self.test_classes[cl].append(test_idx_offset+idx)
-
+        
         # Adding the train classes to the test classes so that we can sample
         # distractors from the train set:
         for cl in self.train_classes:
