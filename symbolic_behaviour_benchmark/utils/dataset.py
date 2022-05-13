@@ -81,6 +81,29 @@ class Dataset(torchDataset):
         '''
         raise NotImplementedError
 
+    def object_centric_sample(
+        self, 
+        from_class: List[int], 
+        excepts: List[int] = None,
+    ) -> Dict[str,object]:
+        '''
+        Sample an object-centric experience from the dataset, from the specified class. Along with relevant distractor experiences.
+        If :param excepts: is not None, this function will make sure to not sample from the specified list of exceptions.
+        :param from_class: None, or List of keys (Strings or Integers) that corresponds to entries in self.classes
+        :param excepts: None, or List of indices (Integers) that are not considered for sampling.
+        :param excepts_class: None, or List of keys (Strings or Integers) that corresponds to entries in self.classes.
+
+        :returns:
+            - sample_d: Dict of:
+                - `"experiences"`: Tensor of the sampled experiences.
+                - `"indices"`: List[int] of the indices of the sampled experiences.
+                - `"exp_labels"`: List[int] consisting of the indices of the label to which the experiences belong.
+                - `"exp_latents"`: Tensor representatin the latent of the experience in one-hot-encoded vector form.
+                - `"exp_latents_values"`: Tensor representatin the latent of the experience in value form.
+                - some other keys provided by the dataset used...
+        '''
+        raise NotImplementedError
+
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         '''
         Samples target experience and distractor experiences according to the distractor sampling scheme.
@@ -150,12 +173,13 @@ class Dataset(torchDataset):
                     listener_sample_d[k][:,0] = v.unsqueeze(0)
                 
         # Object-Centric or Stimulus-Centric?
+        # If Object-Centric, then we must ensure that the stimulus
+        # presented to the listener is from the same class as what
+        # is seen by the speaker, but from a different viewpoint:
         if retain_target and self.kwargs['object_centric']:
-            new_target_for_listener_sample_d = self.sample(
-                idx=None, 
+            new_target_for_listener_sample_d = self.object_centric_sample(
                 from_class=[exp_labels[0]],
                 excepts=[idx],  # Make sure to not sample the actual target!
-                target_only=True
             )
             # Adding batch dimension:
             for k,v in new_target_for_listener_sample_d.items():

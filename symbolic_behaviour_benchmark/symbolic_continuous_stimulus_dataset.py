@@ -170,7 +170,7 @@ class SymbolicContinuousStimulusDataset:
         """
         self.targets contains stimulus-centric indices as keys:
         """
-        self.targets = self.targets[self.indices]
+        self.indices_aligned_targets = self.targets[self.indices]
         
         """
         self.trueidx2idx expects stimulus-centric indices both as keys and values,
@@ -407,6 +407,19 @@ class SymbolicContinuousStimulusDataset:
             self.targets[idx] = idx//self.nbr_object_centric_samples
         
         self.reset_sampling()
+        self.reset_OC_classes()
+    
+    def get_OC_classes(self):
+        if not hasattr(self, 'OC_classes'):
+            self.reset_OC_classes()
+        return self.OC_classes
+
+    def reset_OC_classes(self):
+        self.OC_classes = {}
+        for idx in range(self.dataset_size):
+            cl = self.targets[idx]
+            if cl not in self.OC_classes: self.OC_classes[cl] = []
+            self.OC_classes[cl].append(idx)
 
     def generate_object_centric_samples(self):
         """
@@ -422,27 +435,25 @@ class SymbolicContinuousStimulusDataset:
                     oc_samples.append(lvalue_sample)
                 self.latent_dims[lidx]['sections'][lvalue]['object_centric_samples'] = oc_samples
 
-    def generate_object_centric_observations(self, latent_class):
+    def generate_object_centric_observations(
+        self, 
+        latent_class:np.ndarray,
+        object_centric_sample_idx:int=None):
         """
-        :arg latent_class: Numpy.ndarray of shape (batch_size, self.nbr_latents).
+        :param latent_class: Numpy.ndarray of shape (batch_size, self.nbr_latents).
 
         :return observations: Numpy.ndarray of shape (batch_size, self.nbr_latents) with
             values on each dimension sampled from the corresponding value's (gaussian) 
             distribution.
         """
         batch_size = latent_class.shape[0]
-        object_centric_sample_idx = np.random.randint(low=0,high=self.nbr_object_centric_samples)
+        if object_centric_sample_idx is None:
+            object_centric_sample_idx = np.random.randint(low=0,high=self.nbr_object_centric_samples)
 
         observations = np.zeros((batch_size, self.nbr_latents))
         for bidx in range(batch_size):
             for lidx in range(self.nbr_latents):
                 lvalue = latent_class[bidx,lidx]
-                """
-                lvalue_sample = np.random.choice(
-                    a=self.latent_dims[lidx]['sections'][lvalue]['object_centric_samples'],
-                    size=1,
-                )
-                """
                 lvalue_sample = self.latent_dims[lidx]['sections'][lvalue]['object_centric_samples'][object_centric_sample_idx]
                 observations[bidx,lidx] = lvalue_sample
 
@@ -519,7 +530,7 @@ class SymbolicContinuousStimulusDataset:
 
         return len(self.indices)
 
-    def getclass(self, idx=None, sidx=None):
+    def getclass(self, idx=None, sidx=None, stimulus_centric=False):
         """
         :param idx: Integer representing the stimulus index.
                     If self.sampling_indices is not None, i.e. if using
@@ -529,6 +540,9 @@ class SymbolicContinuousStimulusDataset:
                     self.targets containing stimulus-centric indices as keys.
         :param sidx: Integer representing the object-centric stimulus index,
                     i.e. divided by self.nbr_object_centric_samples already.
+        :param stimulus_centric: Boolean assert whether sidx is an Integer representing 
+                        a stimulus-centric index, i.e. not aligned with self.indices, 
+                        but with self.targets.
         """
         assert idx is not None or sidx is not None
         if idx is not None\
@@ -538,30 +552,75 @@ class SymbolicContinuousStimulusDataset:
         elif sidx is not None:
             # sampling idx is provided already:
             idx = sidx
-        idx = idx%len(self.indices)
-        target = self.targets[idx]
+
+        if stimulus_centric:
+            target = self.targets[idx]
+        else:
+            idx = idx%len(self.indices)
+            #target = self.targets[idx]
+            target = self.indices_aligned_targets[idx]
         return target
 
-    def getlatentvalue(self, idx):
+    def getobjectcentricsampleidx(self, idx=None, scidx=None):
+        """
+        :param idx: Integer in stimulus-centric fashion, and self.indices aligned.
+        :param scidx: Integer in stimulus-centric fashion, but not aligned with self.indices.
+        :return:
+            - object_centric_sid: Integer within [0, nbr_object_centric_samples-1] which
+            identifies the i-th stimulus in the object-centric class of the stimulus indexed
+            with :param idx:.
+        """
+        assert idx is not None or scidx is not None
+
+        if idx is not None:
+            idx = idx%len(self.indices)
+            trueidx = self.indices[idx]
+        else:
+            trueidx = scidx
+
+        object_centric_sidx = trueidx % self.nbr_object_centric_samples
+        return object_centric_sidx
+
+    def getstimuluscentricsampleidx(self, idx):
+        """
+        :param idx: Integer of a stimulus, as seen from the outside, i.e. not necessarily
+                    stimulus-centric yet (with respect to sampling indices and indices remapping...).
+        :return:
+            - stimulus_centric_sid: Integer within [0, self.dataset_size] which
+            identifies in a stimulus-centric fashion with respect to self.targets keys.
+        """
+        if self.sampling_indices is not None:
+            idx = self.sampling_indices[idx]
         idx = idx%len(self.indices)
-        trueidx = self.indices[idx]
+        truesidx = self.indices[idx]
+        return truesidx
+
+    def getlatentvalue(self, idx, stimulus_centric=False):
+        if not stimulus_centric:
+            idx = idx%len(self.indices)
+            trueidx = self.indices[idx]
+        else:
+            trueidx = idx
         object_centric_sidx = trueidx//self.nbr_object_centric_samples
         coord = self.idx2coord(object_centric_sidx)
         latent_class = np.array(coord).reshape((1,-1))
         latent_value = self.generate_observations(latent_class, sample=False)
         return latent_value
 
-    def getlatentclass(self, idx):
-        idx = idx%len(self.indices)
-        trueidx = self.indices[idx]
+    def getlatentclass(self, idx, stimulus_centric=False):
+        if stimulus_centric:
+            trueidx = idx
+        else:
+            idx = idx%len(self.indices)
+            trueidx = self.indices[idx]
         object_centric_sidx = trueidx//self.nbr_object_centric_samples
         coord = self.idx2coord(object_centric_sidx)
         latent_class = np.array(coord)
         return latent_class
 
-    def getlatentonehot(self, idx):
+    def getlatentonehot(self, idx, stimulus_centric=False):
         # object-centrism is taken into account in getlatentclass fn:
-        latent_class = self.getlatentclass(idx)
+        latent_class = self.getlatentclass(idx, stimulus_centric=stimulus_centric)
         latent_one_hot_encoded = np.zeros(sum(self.latent_sizes))
         startidx = 0
         for lsize, lvalue in zip(self.latent_sizes, latent_class):
@@ -569,9 +628,12 @@ class SymbolicContinuousStimulusDataset:
             startidx += lsize 
         return latent_one_hot_encoded
 
-    def gettestlatentmask(self, idx):
-        idx = idx%len(self.indices)
-        trueidx = self.indices[idx]
+    def gettestlatentmask(self, idx, stimulus_centric=False):
+        if stimulus_centric:
+            trueidx = idx
+        else:
+            idx = idx%len(self.indices)
+            trueidx = self.indices[idx]
         test_latents_mask = self.test_latents_mask[trueidx]
         return test_latents_mask
 
@@ -615,9 +677,10 @@ class SymbolicContinuousStimulusDataset:
         factors = self.sample_factors(num, random_state)
         return factors, self.sample_observations_from_factors(factors, random_state)
 
-    def __getitem__(self, idx:int) -> Dict[str,np.ndarray]:
+    def __getitem__(self, idx:int=None, sidx:int=None) -> Dict[str,np.ndarray]:
         """
         :param idx: Integer index.
+        :param sidx: Integer index, on a stimulus-centric basis, i.e. overriding the sampling_indices remapping.
 
         :returns:
             sampled_d: Dict of:
@@ -628,7 +691,11 @@ class SymbolicContinuousStimulusDataset:
                 - `"exp_latents_one_hot_encoded"`: Tensor representation of the latent of the experience in one-hot-encoded class form.
                 - `"exp_test_latent_mask"`: Tensor that highlights the presence of test values, if any on each latent axis.
         """
-        if self.sampling_indices is not None:
+        assert idx is not None or sidx is not None
+        object_centric_sample_idx = None
+
+        if idx is not None \
+        and self.sampling_indices is not None:
             """
             PREVIOUSLY:
             self.sampling_indices is assuming object-centric indices as keys,
@@ -639,14 +706,29 @@ class SymbolicContinuousStimulusDataset:
             """
             #idx = self.sampling_indices[idx//self.nbr_object_centric_samples]
             idx = self.sampling_indices[idx]
-            
+        
+        if sidx is not None:
+            idx = sidx
+            # since it is a stimulus-centric index, we can extract the class
+            # it belongs to from its value:
+            # using idx as entry since it is an index aligned with self.indices
+            object_centric_sample_idx = self.getobjectcentricsampleidx(idx=idx)
+
         latent_class = self.getlatentclass(idx)
-        stimulus = self.generate_object_centric_observations(latent_class.reshape((1,-1)))
+        # Does this latent class vectors contains the object-centric label?
+        # No, but it is identified in object_centric_sample_idx:
+        stimulus = self.generate_object_centric_observations(
+            latent_class.reshape((1,-1)),
+            object_centric_sample_idx=object_centric_sample_idx,
+        )
        
         # PREVIOUSLY: regularised getclass expectations?
         # now expecting stimulus-centric values, but still
         # acknowledging that it is a sampled index...
-        if self.sampling_indices is not None:
+        if sidx is not None \
+        and self.sampling_indices is not None:
+            target = self.getclass(sidx=idx)
+        elif self.sampling_indices is not None:
             target = self.getclass(sidx=idx)
         else:
             target = self.getclass(idx)
@@ -654,6 +736,56 @@ class SymbolicContinuousStimulusDataset:
         latent_value = self.getlatentvalue(idx)
         latent_one_hot_encoded = self.getlatentonehot(idx)
         test_latents_mask = self.gettestlatentmask(idx)
+
+        if self.transform is not None:
+            stimulus = self.transform(stimulus)
+        
+        sampled_d = {
+            "experiences":stimulus, 
+            "exp_labels":target, 
+            "exp_latents":latent_class, 
+            "exp_latents_values":latent_value,
+            "exp_latents_one_hot_encoded":latent_one_hot_encoded,
+            "exp_test_latents_masks":test_latents_mask,
+        }
+
+        return sampled_d
+
+    def getstimuluscentricstimulus(self, sidx:int) -> Dict[str,np.ndarray]:
+        """
+        :param sidx: Integer index, on a stimulus-centric basis, i.e. overriding the sampling_indices remapping.
+
+        :returns:
+            sampled_d: Dict of:
+                - `"experiences"`: Tensor of the sampled experiences.
+                - `"exp_labels"`: List[int] consisting of the indices of the label to which the experiences belong.
+                - `"exp_latents"`: Tensor representation of the latent of the experience in one-hot-encoded vector form.
+                - `"exp_latents_values"`: Tensor representation of the latent of the experience in value form.
+                - `"exp_latents_one_hot_encoded"`: Tensor representation of the latent of the experience in one-hot-encoded class form.
+                - `"exp_test_latent_mask"`: Tensor that highlights the presence of test values, if any on each latent axis.
+        """
+        idx = sidx
+        # since it is a stimulus-centric index, we can extract the class
+        # it belongs to from its value:
+        # using scidx as entry since it is an index not aligned with self.indices, but directly with self.targets
+        object_centric_sample_idx = self.getobjectcentricsampleidx(scidx=idx)
+
+        latent_class = self.getlatentclass(idx, stimulus_centric=True)
+        # Does this latent class vectors contains the object-centric label?
+        # No, but it is identified in object_centric_sample_idx:
+        stimulus = self.generate_object_centric_observations(
+            latent_class.reshape((1,-1)),
+            object_centric_sample_idx=object_centric_sample_idx,
+        )
+       
+        # PREVIOUSLY: regularised getclass expectations?
+        # now expecting stimulus-centric values, but still
+        # acknowledging that it is a sampled index...
+        target = self.getclass(sidx=idx, stimulus_centric=True)
+        
+        latent_value = self.getlatentvalue(idx, stimulus_centric=True)
+        latent_one_hot_encoded = self.getlatentonehot(idx, stimulus_centric=True)
+        test_latents_mask = self.gettestlatentmask(idx, stimulus_centric=True)
 
         if self.transform is not None:
             stimulus = self.transform(stimulus)
