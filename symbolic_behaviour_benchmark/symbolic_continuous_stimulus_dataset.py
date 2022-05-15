@@ -175,6 +175,9 @@ class SymbolicContinuousStimulusDataset:
         """
         self.trueidx2idx expects stimulus-centric indices both as keys and values,
         as self.indices.
+        The values represent the indices, as seen from the outside.
+        The keys represent the indices from the original dataset, inside-view...
+        This mapping goes from original indices to ordered indices as seen from the outside.
         """
         self.trueidx2idx = dict(zip(self.indices,range(len(self.indices))))
 
@@ -200,7 +203,7 @@ class SymbolicContinuousStimulusDataset:
             number of shots, retain high likelihood of being sampled.
             """
             step_size = 100.0
-            per_latent_value_weights = {
+            self.per_latent_value_weights = {
                 lidx: [(nbr_shots+1)*step_size for vidx in range(ld['size'])]
                 for lidx, ld in self.latent_dims.items()
             }
@@ -220,6 +223,7 @@ class SymbolicContinuousStimulusDataset:
             self.indices is expecting stimulus-centric indices both as keys and values.
             The method self.idx2coord is expecting object-centric indices.
             Thus, many coords in valid_coords are the same, but are indexed via stimulus-centric indices...
+            valid_coords[ from-the-outside-scidx ] 
             """
             valid_coords = np.stack(
                 [self.idx2coord(trueidx//self.nbr_object_centric_samples) for trueidx in self.indices],
@@ -244,7 +248,7 @@ class SymbolicContinuousStimulusDataset:
                 nbr_trials = 0
                 while not done:
                     coord = np.zeros(self.nbr_latents)
-                    for lidx, vws in per_latent_value_weights.items():
+                    for lidx, vws in self.per_latent_value_weights.items():
                         norm = sum(vws)
                         probs = [vw/norm for vw in vws]
                         sampled_vidx = np.random.choice(
@@ -275,7 +279,9 @@ class SymbolicContinuousStimulusDataset:
                     # Convert to sample's trueidx:
                     sampled_obj_centric_trueidx = self.coord2idx(coord)
                     # sampled_obj_centric_trueidx is an object-centric index...
-                    sampled_trueidx = sampled_obj_centric_trueidx*self.nbr_object_centric_samples + random.randint(0, self.nbr_object_centric_samples)
+                    # BEWARE: random's randint gives values within low and high, both incluse!!!
+                    # on the contrary to numpy's random.randint which is low(inclusive) and high(exclusive).
+                    sampled_trueidx = sampled_obj_centric_trueidx*self.nbr_object_centric_samples + random.randint(0, self.nbr_object_centric_samples-1)
                     # Record for sampling, iff valid trueidx:
                     # Otherwise, we need to sample again...
                     if sampled_trueidx in self.trueidx2idx:
@@ -288,6 +294,11 @@ class SymbolicContinuousStimulusDataset:
                         # let us sample the coord among the valid ones
                         # that resembles the most this one:
                         coord_l2_dists = np.square(10.0*(valid_coords-coord))
+                        coord_w_weights = copy.deepcopy(coord_l2_dists)
+                        for lidx, vws in self.per_latent_value_weights.items():
+                            inf_norm = max(vws)
+                            coord_w_weights[:, lidx] = inf_norm/(coord_w_weights[:, lidx]+1.0e-3)
+                        coord_w_weights = coord_w_weights.sum(axis=-1)
                         coord_weights = 1.0/(coord_l2_dists.sum(axis=-1)+1.0e-3)
                         norm = coord_weights.sum()
                         probs = [cw/norm for cw in coord_weights]
@@ -313,7 +324,7 @@ class SymbolicContinuousStimulusDataset:
 
                     for lidx, sampled_vidx in enumerate(coord):
                         # Decreasing likelihood of this value for next runs:
-                        vw = per_latent_value_weights[lidx]
+                        vw = self.per_latent_value_weights[lidx]
                         
                         # ...but keep a minimum probability of sampling.
                         # Otherwise, we might find ourselves in the situation
@@ -321,7 +332,7 @@ class SymbolicContinuousStimulusDataset:
                         # dimension while all the other latent dimensions have
                         # their weight distributions at 0...
                         
-                        per_latent_value_weights[lidx][int(sampled_vidx)] = max(
+                        self.per_latent_value_weights[lidx][int(sampled_vidx)] = max(
                             step_size,
                             vw[int(sampled_vidx)]-step_size,
                         )
@@ -330,7 +341,7 @@ class SymbolicContinuousStimulusDataset:
                     # Are we done?
                     # i.e. are all the weights distr equal to their final value: step_size?
                     done = True
-                    for lidx, vw in per_latent_value_weights.items():
+                    for lidx, vw in self.per_latent_value_weights.items():
                         if sum(vw)/len(vw) > step_size:
                             done = False
                             break
@@ -405,7 +416,7 @@ class SymbolicContinuousStimulusDataset:
         """
         for idx in range(self.dataset_size):
             self.targets[idx] = idx//self.nbr_object_centric_samples
-        
+       
         self.reset_sampling()
         self.reset_OC_classes()
     
@@ -510,6 +521,9 @@ class SymbolicContinuousStimulusDataset:
         """
         WARNING: the object-centrism MUST be taken into account
         before calling this function.
+        E.g:
+            - idx2coord( self.targets[self.indices[self.sampling_indices[i]]] )
+            - idx2coord( self.indices_aligned_targets[self.sampling_indices[i]] )
 
         :arg idx: Integer representing an object-centric index,
                     i.e. must be contained within [0, self.dataset_size/self.nbr_object_centric_samples].
