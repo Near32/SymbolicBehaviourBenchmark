@@ -26,7 +26,7 @@ setup(
 
     install_requires=[
       'numpy',
-      'gym',
+      'gym==0.23.1',
     ],
 
     python_requires=">=3.6",
