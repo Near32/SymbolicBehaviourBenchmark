@@ -25,7 +25,7 @@ class CommunicationChannel(MultiDiscrete):
 
     def sample(self):
         output = self.np_random.random_sample(self.max_sentence_length)
-        output *= self.nvec)
+        output *= self.nvec
         output = output.astype(self.dtype)
         # Regularise the use of EoS symbol:
         make_eos = False
