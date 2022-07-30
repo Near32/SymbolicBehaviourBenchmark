@@ -29,7 +29,7 @@ class CommunicationChannel(MultiDiscrete):
         output = output.astype(self.dtype)
         # Regularise the use of EoS symbol:
         make_eos = False
-        for idx, o in enumertate(output):
+        for idx, o in enumerate(output):
             if make_eos:    
                 output[idx] = 0
                 continue
