@@ -9,9 +9,9 @@ Suite of OpenAI Gym-compatible multi-agent reinforcement learning environment ce
 `gym` must be installed. Environments can be created as follows, for instance, in order to test for receptivity and constructivity:
 
 ```python
->>> import gym
->>> import SymbolicBehaviourBenchmark
->>> env = gym.make(
+import gym
+import symbolic_behaviour_benchmark
+env = gym.make(
         "SymbolicBehaviourBenchmark-ReceptiveConstructiveTestEnv-v0", 
         nbr_communication_rounds = 1,
         vocab_size = 6,
@@ -30,14 +30,6 @@ Suite of OpenAI Gym-compatible multi-agent reinforcement learning environment ce
 ```
 
 ## Installation
-
-### Installing via pip
-
-This package is available in PyPi as `SymbolicBehaviourBenchmark`
-
-```bash
-pip install SymbolicBehaviourBenchmark
-```
 
 ### Installing via cloning this repository
 
