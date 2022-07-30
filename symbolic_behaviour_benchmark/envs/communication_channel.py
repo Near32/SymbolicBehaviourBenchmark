@@ -24,10 +24,11 @@ class CommunicationChannel(MultiDiscrete):
         super(CommunicationChannel, self).__init__(nvec=[self.vocab_size+1]*self.max_sentence_length)
 
     def sample(self):
-        output = (self.np_random.random_sample(self.nvec.shape)*self.nvec).astype(self.dtype)
+        output = self.np_random.random_sample(self.max_sentence_length)
+        output *= self.nvec)
+        output = output.astype(self.dtype)
         # Regularise the use of EoS symbol:
         make_eos = False
-        import ipdb; ipdb.set_trace()
         for idx, o in enumertate(output):
             if make_eos:    
                 output[idx] = 0
@@ -35,7 +36,7 @@ class CommunicationChannel(MultiDiscrete):
             if o==0:
                 make_eos = True
         
-        return output
+        return np.expand_dims(output, axis=0)
 
     def contains(self, x):
         if isinstance(x, list):
