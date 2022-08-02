@@ -2,7 +2,7 @@
 
 Suite of OpenAI Gym-compatible multi-agent reinforcement learning environment centered around referntial games to benchmark for behavioral traits pertaining to symbolic behaviours, as described in [Santoro et al., 2021, "Symbolic Behaviours in Artificial Intelligence"](https://arxiv.org/abs/2102.03406), primarily: exhibiting receptive, constructive, malleable, and separable behaviours.
 
-![default_env](https://www.github.com/Near32/SymbolicBehaviourBenchmark/raw/main/resources/symbolic-continuous-stimulus-representation-binding-problem-Descriptive%20%2B%20Listener%20Feedback.drawio.png)
+![default_env](https://www.github.com/Near32/SymbolicBehaviourBenchmark/raw/main/resources/symbolic-continuous-stimulus-representation-binding-problem-Descriptive+ListenerFeedback.drawio.png)
 
 ## Usage
 
