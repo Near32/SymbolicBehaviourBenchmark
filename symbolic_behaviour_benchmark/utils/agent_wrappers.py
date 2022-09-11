@@ -54,13 +54,13 @@ class RuleBasedAgentWrapper(object):
 
         self.sentence2sentenceId = {}
         for sid in range(self.nb_possible_sentences):
-            self.sentence2sentenceId[ self.sentenceId2sentence[sid].tostring() ] = sid        
+            self.sentence2sentenceId[ self.sentenceId2sentence[sid].tobytes() ] = sid        
         
     def _encode_action(self, action_dict, info_dict):
         original_action_decision_id = action_dict['decision']
         original_action_sentence = action_dict['communication_channel']
         
-        original_action_sentence_id = self.sentence2sentenceId[ original_action_sentence.tostring() ]
+        original_action_sentence_id = self.sentence2sentenceId[ original_action_sentence.tobytes() ]
 
         # Are there actions available apart from No-op?
         available_actions_ids_p1 = info_dict['legal_actions'][0]* np.arange(info_dict['legal_actions'].shape[-1]+1)[1:]

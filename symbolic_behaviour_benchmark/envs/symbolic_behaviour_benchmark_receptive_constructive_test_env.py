@@ -393,6 +393,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             if self.stimulus_idx == (len(data_loader)-1)\
             and self.dataloader_index == (len(self.dataloader_index2mode)-1):
                 self.episode_ends = True
+        
+        if self.infos[0]['end_of_mode'] \
+        and self.episode_ends:
+            assert self.done
 
         return self.observations, self.infos
 

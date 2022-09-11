@@ -140,7 +140,7 @@ class Dataset(torchDataset):
         # Adding batch dimension:
         for k,v in sample_d.items():
             if not(isinstance(v, torch.Tensor)):    
-                v = torch.Tensor(v)
+                v = torch.from_numpy(np.array(v))
             sample_d[k] = v.unsqueeze(0)
 
          
@@ -169,7 +169,7 @@ class Dataset(torchDataset):
                 # Adding batch dimension:
                 for k,v in new_target_for_listener_sample_d.items():
                     if not(isinstance(v, torch.Tensor)):    
-                        v = torch.Tensor(v)
+                        v = torch.from_numpy(np.array(v))
                     listener_sample_d[k][:,0] = v.unsqueeze(0)
                 
         # Object-Centric or Stimulus-Centric?
@@ -184,7 +184,7 @@ class Dataset(torchDataset):
             # Adding batch dimension:
             for k,v in new_target_for_listener_sample_d.items():
                 if not(isinstance(v, torch.Tensor)):    
-                    v = torch.Tensor(v)
+                    v = torch.from_numpy(np.array(v))
                 listener_sample_d[k][:,0] = v.unsqueeze(0)
             
         listener_sample_d["experiences"], target_decision_idx, orders = shuffle(listener_sample_d["experiences"])

@@ -58,7 +58,7 @@ class DiscreteCombinedActionWrapper(gym.Wrapper):
 
         self.sentence2sentenceId = {}
         for sid in range(self.nb_possible_sentences):
-            self.sentence2sentenceId[ self.sentenceId2sentence[sid].tostring() ] = sid        
+            self.sentence2sentenceId[ self.sentenceId2sentence[sid].tobytes() ] = sid        
         
     def _make_infos(self, observations, infos):
         self.infos = []
@@ -127,7 +127,7 @@ class DiscreteCombinedActionWrapper(gym.Wrapper):
         original_action_decision_id = action_dict['decision']
         original_action_sentence = action_dict['communication_channel']
         
-        original_action_sentence_id = self.sentence2sentenceId[ original_action_sentence.tostring() ]
+        original_action_sentence_id = self.sentence2sentenceId[ original_action_sentence.tobytes() ]
 
         # Is it No-op?
         if original_action_sentence[0].item()==0 and original_action_decision_id==0:
