@@ -563,7 +563,7 @@ def generate_receptive_constructive_test_env(**kwargs):
             # of the target, seemingly.  
 
             "descriptive":              kwargs.get('descriptive', False),
-            "descriptive_target_ratio": 0.5,
+            "descriptive_target_ratio": 1.0/(kwargs.get("nbr_distractors", 1)+1),
 
             "object_centric":           kwargs.get("nbr_object_centric_samples",1)>1,
             "nbr_stimulus":             1,

@@ -253,10 +253,11 @@ class StimulusObservationWrapper(gym.Wrapper):
             **kwargs,
         )
         
-def s2b_wrap(env, combined_actions=False, dict_obs_space=False):
+def s2b_wrap(env, combined_actions=False, dict_obs_space=False, multi_binary_comm=False):
     if combined_actions:
         env = DiscreteCombinedActionWrapper(env)
-    if any([("communication_channel" in k) for k in env.unwrapped.observation_space]):
+    if multi_binary_comm \
+    and any([("communication_channel" in k) for k in env.unwrapped.observation_space]):
         env = MultiBinaryCommunicationChannelWrapper(env)
     if not dict_obs_space:
         env = StimulusObservationWrapper(env)
