@@ -9,7 +9,7 @@ from symbolic_behaviour_benchmark.utils import wrappers
 def test_env(
     nbr_communication_rounds=2,
     vocab_size=10,
-    max_sentence_length=1,
+    max_sentence_length=2,
     nbr_latents=2, 
     min_nbr_values_per_latent=4, 
     max_nbr_values_per_latent=5,
@@ -17,6 +17,7 @@ def test_env(
     nbr_distractors=3,
     allow_listener_query=False,
     use_communication_channel_permutations=True,
+    multi_binary_comm=True,
     ):
     
     """
@@ -75,7 +76,7 @@ def test_env(
     
     dcaw_env = wrappers.DiscreteCombinedActionWrapper(env)
 
-    env = wrappers.s2b_wrap(env, combined_actions=True)
+    env = wrappers.s2b_wrap(env, combined_actions=True, multi_binary_comm=multi_binary_comm)
     
     obs, info = env.reset()
     
@@ -128,4 +129,6 @@ if __name__ == "__main__":
     np.random.seed(seed)
     random.seed(seed)
 
-    test_env()
+    #test_env()
+    test_env(multi_binary_comm=False)
+
