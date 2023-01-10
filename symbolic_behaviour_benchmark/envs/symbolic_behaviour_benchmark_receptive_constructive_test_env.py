@@ -33,7 +33,8 @@ class CommunicationChannelPermutation(object):
         shuffledarr = np.arange(start=1,stop=self.vocab_size+1)
         if not self.identity:
             np.random.shuffle(shuffledarr)
-
+        
+        # WARNING: idx 0 is the grounded EoS symbol:
         self.communication_channel_bijection_decoder = { idx+1: v.item() for idx, v in enumerate(shuffledarr)}
         self.communication_channel_bijection_decoder[0] = 0 
         self.communication_channel_bijection_encoder = dict(zip(self.communication_channel_bijection_decoder.values(), self.communication_channel_bijection_decoder.keys()))        
@@ -225,7 +226,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         return seed 
 
     def _regularise_communication_channel(self, communication_channel_content):
-        # Regularise the use of EoS symbol:
+        # Regularise the use of EoS symbol which is idx 0 of the vocabulary:
         make_eos = False
         # batch dim=1 x max_sentence_length...
         for idx, o in enumerate(communication_channel_content[0]):

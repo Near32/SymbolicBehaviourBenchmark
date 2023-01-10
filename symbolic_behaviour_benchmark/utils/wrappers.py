@@ -168,19 +168,19 @@ class MultiBinaryCommunicationChannelWrapper(gym.Wrapper):
         self.observation_space = copy.deepcopy(env.observation_space)
         self.vocabulary_size = self.observation_space.spaces["communication_channel"].vocab_size
         self.max_sentence_length = self.observation_space.spaces["communication_channel"].max_sentence_length
-        self.communication_channel_observation_space_size = self.max_sentence_length*(self.vocabulary_size+1)
-        self.observation_space.spaces["communication_channel"] = gym.spaces.Discrete(self.communication_channel_observation_space_size)
+        self.multi_binary_communication_channel_observation_space_size = self.max_sentence_length*(self.vocabulary_size+1)
+        self.observation_space.spaces["multi_binary_communication_channel"] = gym.spaces.Discrete(self.multi_binary_communication_channel_observation_space_size)
 
         self.action_space = self.env.action_space 
 
     def _make_obs_infos(self, observations, infos):
         for player_idx in range(len(observations)):        
             token_start = 0
-            new_communication_channel = np.zeros((1, self.communication_channel_observation_space_size))
+            new_communication_channel = np.zeros((1, self.multi_binary_communication_channel_observation_space_size))
             for token_idx in observations[player_idx]["communication_channel"][0]:
                 new_communication_channel[0, int(token_start+token_idx)] = 1
                 token_start += self.vocabulary_size+1
-            observations[player_idx]["communication_channel"] = new_communication_channel
+            observations[player_idx]["multi_binary_communication_channel"] = new_communication_channel
         return observations, infos
 
     def reset(self, **kwargs):
