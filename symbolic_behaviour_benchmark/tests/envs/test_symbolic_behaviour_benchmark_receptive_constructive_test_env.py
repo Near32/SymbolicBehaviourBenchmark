@@ -186,6 +186,7 @@ def test_env_descr_feedback(
     provide_listener_feedback=True,
     use_communication_channel_permutations=True,
     sampling_strategy='component-focused-1shot',
+    render=False,
     ):
     
     """
@@ -246,22 +247,26 @@ def test_env_descr_feedback(
     )
     
     obs, info = env.reset()
-    
-    import ipdb; ipdb.set_trace()
+    if render:
+        env.render(mode='human') 
+    #import ipdb; ipdb.set_trace()
 
     speaker_action = {'decision':0, 'communication_channel': np.ones((1,5))*3}
     listener_action = {'decision':2, 'communication_channel': np.ones((1,5))*2}
     output = env.step(action=[speaker_action, listener_action])
 
-    import ipdb; ipdb.set_trace()
+    #import ipdb; ipdb.set_trace()
     
     ok = True
     while ok:
+        if render:
+            env.render(mode='human')
         speaker_action = {'decision':0, 'communication_channel': np.ones((1,5))*3}
         listener_action = {'decision':0, 'communication_channel': np.ones((1,5))*2}
         foutput = env.step(action=[speaker_action, listener_action])
-        import ipdb; ipdb.set_trace()
-
+        done = foutput[2]
+        ok = done==False
+        
     env.close()
 
 if __name__ == "__main__":
@@ -280,4 +285,4 @@ if __name__ == "__main__":
     #test_env()
     #test_env_sampling_strategy()
     #test_env_descr_feedback()
-    test_env_descr_feedback(nbr_object_centric_samples=2)
+    test_env_descr_feedback(nbr_object_centric_samples=2, render=True)

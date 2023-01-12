@@ -1,6 +1,11 @@
 from typing import Dict, List, Optional 
 
 import numpy as np
+import matplotlib
+#matplotlib.use('Qt5Agg')
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+import cv2
 
 import gym
 from gym import spaces
@@ -361,6 +366,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         info['nbr_games'] = self.racc[self.dataloader_index]['nbr_games']
         info['running_accuracy'] = self.racc[self.dataloader_index]['nbr_successes']*100.0/(self.racc[self.dataloader_index]['nbr_games']+1e-8)
         
+        
         if self.listener_feedback\
         and self.round_idx==-1\
         and not self.feedback_provided:
@@ -504,10 +510,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.communication_history["speaker"].append(self.speaker_actions["communication_channel"])
         self.communication_history["listener"].append(self.listener_actions["communication_channel"])
         
-        reward = self._gen_reward()
+        self.reward = self._gen_reward()
         next_obs, next_infos = self._gen_obs_info()
         
-        return next_obs, [reward for _ in range(self.nbr_players)], self.done, next_infos
+        return next_obs, [self.reward for _ in range(self.nbr_players)], self.done, next_infos
 
 
     def _gen_reward(self):
@@ -550,6 +556,186 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
         return reward
 
+    def render(self, mode='human', close=False):
+        """
+        Render the whole-grid human view
+        """
+        font_color =  (20, 20, 255, 255)
+        font_red_color =  (255, 20, 20, 255)
+        font_size = 1.0 #0.5
+        font = cv2.FONT_HERSHEY_TRIPLEX
+        #font = cv2.FONT_HERSHEY_SIMPLEX, #font family
+ 
+        height_px = 480
+        width_px = 640
+        img = 255*np.ones(shape=(height_px, width_px, 3), dtype=np.uint8)
+        
+        if mode == 'human':
+            #self.window.show_img(img)
+            #self.window.set_caption(f"Communication Channel: {self.communication_channel_content}")
+            img = np.concatenate([img, 255*np.ones_like(img)], axis=1)
+            orig_x = img.shape[0]
+            orig_y = img.shape[1]
+            
+            decisions = [
+                [getattr(self,'speaker_actions', {'decision':0})['decision']], 
+                [getattr(self,'listener_actions', {'decision':0})['decision']],
+            ]
+            messages_sent = [
+                getattr(self,'speaker_actions', {'communication_channel':np.zeros(self.rg_config['max_sentence_length'])})['communication_channel'].squeeze(), 
+                getattr(self,'listener_actions', {'communication_channel':np.zeros(self.rg_config['max_sentence_length'])})['communication_channel'].squeeze(), 
+            ]
+            
+            stimuli = [
+                self.observations[0]['stimulus'].squeeze(),
+                self.observations[1]['stimulus'].squeeze(),
+            ]
+            latent_stimuli = [
+                self.infos[0]['speaker_exp_latents'].squeeze(),
+                self.infos[0]['listener_exp_latents'].squeeze(),
+            ]
+            messages_received = [
+                self.observations[0]['communication_channel'].squeeze(),
+                self.observations[1]['communication_channel'].squeeze(),
+            ]
+            
+            x_inc = int(orig_x*0.9)//8
+            pad_x = int(orig_x*0.15)
+
+            y_inc = int(orig_y*0.8)//2
+            pad_y = int(orig_y*0.1)
+            
+            #print(pad_x, x_inc, pad_y, y_inc)
+            
+            init_x = pad_x
+            pos_x = init_x
+
+            init_y = pad_y
+            for stim_idx, stim in enumerate(latent_stimuli):
+                pos_y = init_y+y_inc*stim_idx
+                text = 'LAT: '
+                for tidx, token in enumerate(stim):
+                    text += f'{int(token)} '
+                position = (pos_y,pos_x)
+                cv2.putText(
+                    img,
+                    text,
+                    position, #position at which writing has to start
+                    font,
+                    font_size,
+                    font_color,
+                    2,  #stroke
+                )
+            pos_x += x_inc
+            
+            init_y = pad_y
+            for stim_idx, stim in enumerate(stimuli):
+                pos_y = init_y+y_inc*stim_idx
+                text = ''
+                for tidx, token in enumerate(stim):
+                    text += f'{token:.2f} '
+                position = (pos_y,pos_x)
+                cv2.putText(
+                    img,
+                    text,
+                    position, #position at which writing has to start
+                    font,
+                    font_size,
+                    font_color,
+                    2,  #stroke
+                )
+            pos_x += x_inc
+            
+            init_y = pad_y
+            for m_idx, message in enumerate(messages_received):
+                pos_y = init_y+y_inc*m_idx
+                text = 'MR: '
+                for tidx, token in enumerate(message):
+                    text += f'{chr(97+int(token))} ' if token != 0 else 'EoS '
+                position = (pos_y,pos_x)
+                cv2.putText(
+                    img,
+                    text,
+                    position, #position at which writing has to start
+                    font,
+                    font_size,
+                    font_color,
+                    2,  #stroke
+                )
+            pos_x += int(x_inc*1.5)
+
+            init_y = pad_y
+            for didx, decision in enumerate(decisions):
+                pos_y = init_y+y_inc*didx
+                text = 'D: '
+                for tidx, token in enumerate(decision):
+                    text += f'{token} '
+                position = (pos_y,pos_x)
+                cv2.putText(
+                    img,
+                    text,
+                    position, #position at which writing has to start
+                    font,
+                    font_size,
+                    font_color,
+                    2,  #stroke
+                )
+            pos_x += x_inc
+            
+            init_y = pad_y
+            for m_idx, message in enumerate(messages_sent):
+                pos_y = init_y+y_inc*m_idx
+                text = 'MS: '
+                for tidx, token in enumerate(message):
+                    text += f'{chr(97+int(token))} ' if token != 0 else 'EoS '
+                position = (pos_y,pos_x)
+                cv2.putText(
+                    img,
+                    text,
+                    position, #position at which writing has to start
+                    font,
+                    font_size,
+                    font_color,
+                    2,  #stroke
+                )
+            pos_x += x_inc
+
+            # Game IDX:
+            text = f"RefGame IDX: {self.mode}{self.racc[self.dataloader_index]['nbr_games']}"
+            position = (int(orig_y//2), pos_x)
+            cv2.putText(
+                    img,
+                    text,
+                    position, #position at which writing has to start
+                    font,
+                    font_size,
+                    font_red_color,
+                    2,  #stroke
+                )
+            pos_x += int(x_inc/2)
+            # Result:
+            acc = self.racc[self.dataloader_index]['nbr_successes']/(1.0e-3+self.racc[self.dataloader_index]['nbr_games'])*100.0 
+            text = f"Accuracy : {self.racc[self.dataloader_index]['nbr_successes']}/{self.racc[self.dataloader_index]['nbr_games']} : {acc:.1f}%"
+            position = (int(orig_y//2), pos_x)
+            cv2.putText(
+                    img,
+                    text,
+                    position, #position at which writing has to start
+                    font,
+                    font_size,
+                    font_red_color,
+                    2,  #stroke
+                )
+             
+ 
+        if mode == 'human'\
+        and getattr(self, 'window', None) == None:
+            plt.imshow(img)
+            plt.show()#block=False)
+
+                  
+        return img
+
 
 def generate_receptive_constructive_test_env(**kwargs):
     rg_config = kwargs.get('rg_config', None)
@@ -568,7 +754,7 @@ def generate_receptive_constructive_test_env(**kwargs):
             # of the target, seemingly.  
 
             "descriptive":              kwargs.get('descriptive', False),
-            "descriptive_target_ratio": 1.0/(kwargs.get("nbr_distractors", 1)+1),
+            "descriptive_target_ratio": 1.0/(1+kwargs.get("nbr_distractors", 1)+int(kwargs.get('descriptive', False))),
 
             "object_centric":           kwargs.get("nbr_object_centric_samples",1)>1,
             "nbr_stimulus":             1,
@@ -642,7 +828,7 @@ def generate_receptive_constructive_test_env(**kwargs):
             #"with_weight_maxl1_loss":   False,
         }
         kwargs['rg_config'] = rg_config
-
+    
     # Create dataset:
     train_dataset = kwargs.get("train_dataset", None)
     if train_dataset is None:

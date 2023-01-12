@@ -153,7 +153,9 @@ class Dataset(torchDataset):
         
         retain_target = True
         if self.kwargs["descriptive"]:
-            retain_target = torch.rand(size=(1,)).item() < self.kwargs['descriptive_target_ratio']
+            rand_value = torch.rand(size=(1,)).item() 
+            #print(f"DESCR : {rand_value:0.2f} < {self.kwargs['descriptive_target_ratio']}")
+            retain_target = rand_value < self.kwargs['descriptive_target_ratio']
             # Target experience is excluded from the experiences yielded to the listener:
             if not retain_target:
                 # Sample a new element for the listener to consider.
