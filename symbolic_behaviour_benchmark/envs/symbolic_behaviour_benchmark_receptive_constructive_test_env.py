@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import matplotlib
 #matplotlib.use('Qt5Agg')
-matplotlib.use('TkAgg')
+#matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import cv2
 
