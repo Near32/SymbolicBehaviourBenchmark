@@ -95,7 +95,8 @@ class DiscreteCombinedActionWrapper(gym.Wrapper):
 
     def _decode_action(self, action):
         action_dicts = []
-        for pidx in range(self.nbr_agent):
+        #for pidx in range(self.nbr_agent):
+        for pidx in range(len(action)):
             pidx_a = action[pidx]
             if isinstance(pidx_a, np.ndarray):  pidx_a = pidx_a.item()
             

@@ -443,7 +443,7 @@ class SymbolicContinuousStimulusDataset:
                         loc=self.latent_dims[lidx]['sections'][lvalue]['mean'],
                         scale=self.latent_dims[lidx]['sections'][lvalue]['sigma'],
                     )
-                    oc_samples.append(lvalue_sample)
+                    oc_samples.append(float(lvalue_sample))
                 self.latent_dims[lidx]['sections'][lvalue]['object_centric_samples'] = oc_samples
 
     def generate_object_centric_observations(
@@ -466,7 +466,7 @@ class SymbolicContinuousStimulusDataset:
             for lidx in range(self.nbr_latents):
                 lvalue = latent_class[bidx,lidx]
                 lvalue_sample = self.latent_dims[lidx]['sections'][lvalue]['object_centric_samples'][object_centric_sample_idx]
-                observations[bidx,lidx] = lvalue_sample
+                observations[bidx,lidx] = float(lvalue_sample)
 
         return observations
 
@@ -493,7 +493,7 @@ class SymbolicContinuousStimulusDataset:
                     )
                 else:
                     lvalue_sample = self.latent_dims[lidx]['sections'][lvalue]['mean']
-                observations[bidx,lidx] = lvalue_sample
+                observations[bidx,lidx] = float(lvalue_sample)
 
         return observations
 
@@ -805,12 +805,12 @@ class SymbolicContinuousStimulusDataset:
             stimulus = self.transform(stimulus)
         
         sampled_d = {
-            "experiences":stimulus, 
-            "exp_labels":target, 
-            "exp_latents":latent_class, 
-            "exp_latents_values":latent_value,
-            "exp_latents_one_hot_encoded":latent_one_hot_encoded,
-            "exp_test_latents_masks":test_latents_mask,
+            "experiences":stimulus.astype(np.float32), 
+            "exp_labels":target.astype(int), 
+            "exp_latents":latent_class.astype(np.float32), 
+            "exp_latents_values":latent_value.astype(np.float32),
+            "exp_latents_one_hot_encoded":latent_one_hot_encoded.astype(np.float32),
+            "exp_test_latents_masks":test_latents_mask.astype(np.float32),
         }
 
         return sampled_d

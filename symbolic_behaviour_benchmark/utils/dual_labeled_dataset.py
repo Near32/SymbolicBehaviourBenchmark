@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 from .dataset import Dataset
 import torch
 import random
+import copy
 
 
 class DualLabeledDataset(Dataset):
@@ -49,6 +50,10 @@ class DualLabeledDataset(Dataset):
         # reset train dataset first since
         # the test dataset is relying on
         # the train dataset as a prototype:
+        self.previous_datasets = {
+            'train':copy.deepcopy(self.datasets['train']),
+            'test':copy.deepcopy(self.datasets['test']),
+        }
         self.datasets["train"].reset()
         self.datasets["test"].reset()
 
