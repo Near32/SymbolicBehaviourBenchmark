@@ -754,13 +754,19 @@ class SymbolicContinuousStimulusDataset:
         if self.transform is not None:
             stimulus = self.transform(stimulus)
         
+        # POSDIS utterance as RNN STATES
+        rnn_states = latent_class+1
+         
         sampled_d = {
             "experiences":stimulus, 
+            #"experiences":latent_class[np.newaxis,...], #stimulus, 
             "exp_labels":target, 
             "exp_latents":latent_class, 
             "exp_latents_values":latent_value,
             "exp_latents_one_hot_encoded":latent_one_hot_encoded,
             "exp_test_latents_masks":test_latents_mask,
+            ##
+            "rnn_states":rnn_states,
         }
 
         return sampled_d
