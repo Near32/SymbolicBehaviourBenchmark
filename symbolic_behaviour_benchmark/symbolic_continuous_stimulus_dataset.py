@@ -758,13 +758,13 @@ class SymbolicContinuousStimulusDataset:
         rnn_states = latent_class+1
          
         sampled_d = {
-            "experiences":stimulus, 
+            "experiences":stimulus.astype(np.float32)[np.newaxis,...], 
             #"experiences":latent_class[np.newaxis,...], #stimulus, 
-            "exp_labels":target, 
-            "exp_latents":latent_class, 
-            "exp_latents_values":latent_value,
-            "exp_latents_one_hot_encoded":latent_one_hot_encoded,
-            "exp_test_latents_masks":test_latents_mask,
+            "exp_labels":target.astype(int), 
+            "exp_latents":latent_class.astype(np.float32), 
+            "exp_latents_values":latent_value.astype(np.float32),
+            "exp_latents_one_hot_encoded":latent_one_hot_encoded.astype(np.float32),
+            "exp_test_latents_masks":test_latents_mask.astype(np.float32),
             ##
             "rnn_states":rnn_states,
         }
