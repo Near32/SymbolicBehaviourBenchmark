@@ -5,6 +5,7 @@ import matplotlib
 #matplotlib.use('Qt5Agg')
 #matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 import cv2
 
 import gym
@@ -22,6 +23,31 @@ from symbolic_behaviour_benchmark.symbolic_continuous_stimulus_dataset import Sy
 from symbolic_behaviour_benchmark.utils import DualLabeledDataset
 from symbolic_behaviour_benchmark.utils import DictDatasetWrapper
 
+from symbolic_behaviour_benchmark.utils.pybullet_renderer	import PyBulletRenderer
+
+
+def scs_to_image(scs_values):
+    N_dim = len(scs_values)  # Number of attribute/factor dimensions
+    fig, ax = plt.subplots(N_dim, 1, figsize=(6, N_dim * 2))
+
+    for i, value in enumerate(scs_values):
+        ax[i].set_xlim(-1, 1)
+        ax[i].set_ylim(-0.5, 0.5)
+        ax[i].axis('off')
+
+        # Create a circle at the position corresponding to the scs value
+        circle = Circle((value, 0), radius=0.1, color='blue')
+        ax[i].add_patch(circle)
+
+    plt.subplots_adjust(hspace=0)
+    plt.axis('off')
+    # Convert the plot to a numpy array
+    fig.canvas.draw()
+    img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+
+    plt.close(fig)
+    return img
 
 class CommunicationChannelPermutation(object):
     def __init__(self, env, identity=False):
@@ -137,6 +163,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         **kwargs,
     ):  
         super(SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv, self).__init__()
+        self.kwargs = kwargs
         self.nbr_players = 2
         self.rg_config = rg_config
         self.datasets = datasets
@@ -155,6 +182,11 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.listener_feedback = provide_listener_feedback
         self.feedback_provided = False
 
+        # 3D Renderer:
+        self.renderer = None
+        if self.kwargs.get('domain', 'SCS') == '3D':
+            self.renderer = PyBulletRenderer(N_dim=self.nbr_latents)
+        
         # Actions consist of a dictionnary of two elements:
         # - decision that is discrete integer valued
         # - communication channel that consist of ungrounded tokens, represented as integer values.
@@ -490,6 +522,17 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         # Return first observation
         obs, infos = self._gen_obs_info(reset=True)
 
+        # convert to image:
+        if self.kwargs.get('domain', 'SCS') =='2D':
+          obs_image = [copy.deepcopy(o) for o in obs]
+          for pidx in range(self.nbr_players): 
+            obs_image[pidx]["stimulus_2D"] = scs_to_image(obs[pidx]['stimulus'])
+          obs = obs_image
+        elif self.kwargs.get('domain', 'SCS') =='3D':
+          obs_image = [copy.deepcopy(o) for o in obs]
+          for pidx in range(self.nbr_players): 
+            obs_image[pidx]["stimulus_3D"] = self.renderer.render(obs[pidx]['stimulus'])
+          obs = obs_image
         return obs, infos
 
     def step(self, action):
@@ -513,6 +556,17 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.reward = self._gen_reward()
         next_obs, next_infos = self._gen_obs_info()
         
+        # convert to image:
+        if self.kwargs.get('domain', 'SCS') =='2D':
+          obs_image = [copy.deepcopy(o) for o in next_obs]
+          for pidx in range(self.nbr_players): 
+            obs_image[pidx]["stimulus_2D"] = scs_to_image(next_obs[pidx]['stimulus'])
+          next_obs = obs_image
+        elif self.kwargs.get('domain', 'SCS') =='3D':
+          obs_image = [copy.deepcopy(o) for o in next_obs]
+          for pidx in range(self.nbr_players): 
+            obs_image[pidx]["stimulus_3D"] = self.renderer.render(next_obs[pidx]['stimulus'])
+          next_obs = obs_image
         return next_obs, [self.reward for _ in range(self.nbr_players)], self.done, next_infos
 
 

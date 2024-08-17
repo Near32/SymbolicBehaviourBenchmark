@@ -27,6 +27,7 @@ setup(
     install_requires=[
       'numpy',
       'gym==0.23.1',
+      'pybullet==3.2.6',
     ],
 
     python_requires=">=3.6",

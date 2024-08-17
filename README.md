@@ -26,6 +26,7 @@ env = gym.make(
         allow_listener_query = False,
         provide_listener_feedback = True,
         sampling_strategy = "component-focused-4shots",
+        domain = 'SCS',
     )
 ```
 
