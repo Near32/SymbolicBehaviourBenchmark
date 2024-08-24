@@ -24,6 +24,7 @@ from symbolic_behaviour_benchmark.utils import DualLabeledDataset
 from symbolic_behaviour_benchmark.utils import DictDatasetWrapper
 
 from symbolic_behaviour_benchmark.utils.pybullet_renderer	import PyBulletRenderer
+from symbolic_behaviour_benchmark.utils.utils import STR2BT, BT2STR
 
 
 def scs_to_image(scs_values):
@@ -160,6 +161,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         provide_listener_feedback=False,
         use_communication_channel_permutations=True,
         nbr_shots=1,
+        max_prompt_sentence_length=2**16,
+        include_prompts=False,
         **kwargs,
     ):  
         super(SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv, self).__init__()
@@ -181,6 +184,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.nbr_shots = nbr_shots 
         self.listener_feedback = provide_listener_feedback
         self.feedback_provided = False
+        self.max_prompt_sentence_length = max_prompt_sentence_length
+        self.include_prompts = include_prompts
 
         # 3D Renderer:
         self.renderer = None
@@ -217,7 +222,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         )
         self.communication_channel_observation_space = copy.deepcopy(self.communication_channel_action_space)
 
-        self.id_length = 10
+        self.id_length = 3
         self.other_agent_id_observation_space = spaces.Box(
             low=0,
             high=255,
@@ -258,6 +263,259 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
         self.seed(seed)
 
+    def _update_speaker_prompt(self, obs, info, context_prompt=""):
+        ''' 
+        Update the prompt based on the current observation.
+        TODO: update to multiple distractor stimuli...
+        '''
+        assert self.nbr_distractors == 0
+
+        round_idx_reward = 0
+        if self.listener_feedback:
+            round_idx_reward = -1
+
+        game_id = info['stimulus_idx']
+        step_id = info['round_idx']
+        
+        if context_prompt == "": 
+          context_prompt = f"You and your partner are playing a sequence of referential games. "
+          context_prompt += f"You are the speaker.\n"
+          context_prompt += f"Your partner has id {obs['other_agent_id']}.\n"
+          
+          context_prompt += f"In the first phase, you will get accounted with "
+          context_prompt += f"the atomic components of the possible observations. "
+          context_prompt += f"Then, the game counter will restart, and you will be tested with "
+          context_prompt += f"new observations, combining the same atomic components in novel ways.\n"
+          
+          context_prompt += f"At each game, each of you observes a stimulus, "
+          context_prompt += f"which represents a latent meaning, "
+          context_prompt += f"and your common goal is to figure out whether you are observing "
+          context_prompt += f"different or similar latent meanings. "
+          context_prompt += f"You can communicate with your partner using the communication channel. "
+          context_prompt += f"The communication channel is made up of {self.vocab_size+1} symbols "
+          context_prompt += f"that you can combine together to form a sentence of "
+          context_prompt += f"maximum length {self.max_sentence_length}. "
+          context_prompt += f"Beware that symbol 0 is grounded already. "
+          context_prompt += f"It is the end-of-message symbol. "
+          context_prompt += f"It means that any symbol that comes after it will be ignored "
+          context_prompt += f"and regularised into symbol 0.\n"
+        
+          context_prompt += f"From one game to the next, you should aim to be consistent "
+          context_prompt += f"so that your partner can figure out the code that you are using "
+          context_prompt += f"to communicate and decrypt messages towards "
+          context_prompt += f"fulfilling your common goal.\n"
+        else:
+          context_prompt = context_prompt.replace("are observing", "have observed")
+          context_prompt = context_prompt.replace("here is a ", "there was a ")
+          context_prompt = context_prompt.replace("partner is being", "partner was being")
+          context_prompt = context_prompt.replace("you observe.", "you observed.")
+          #context_prompt = context_prompt.replace("It is an ", "It was an ")
+          # Provide results about the previous game:
+          if step_id == round_idx_reward:
+            context_prompt += f"Your partner has decided that both of you were observing "
+            if self.listener_actions["decision"] > 0 :# TODO == self.sample["target_decision_idx"].item():
+              context_prompt += "different latent meanings.\n"
+            else:
+              context_prompt += "similar latent meanings.\n"
+            successful_game = self.listener_actions["decision"] == self.sample["target_decision_idx"].item()
+            if successful_game:
+              context_prompt += f"This was correct. " 
+            else:
+              context_prompt += f"This was incorrect. " 
+            context_prompt += f"You and your partner have "
+            context_prompt += f"{'won' if successful_game else'lost'} "
+            context_prompt += f"game #{game_id}.\n"
+
+        comm_channel_char = obs['communication_channel'][0].astype(int).tolist()
+        # For grounding purposes, we need to keep integers.
+        #comm_channel_char = [chr(i) for i in obs['communication_channel'][0].astype(int).tolist()]
+        
+        # Previous message from the speaker:
+        prev_speaker_utterance = self.communication_history["speaker"][-1]
+        # no need to decode it from speaker viewpoint:
+        #prev_speaker_utterance = self.per_player_permutation[0].decode_action(
+        #    {'communication_channel':prev_speaker_utterance}
+        #)["communication_channel"]
+        #prev_comm_channel_char = prev_speaker_utterance[0].astype(int).tolist()
+        prev_comm_channel_char = prev_speaker_utterance.astype(int).tolist()
+
+        if step_id == 0:
+          context_prompt += f"\nStarting game #{game_id}, this is the new stimulus: "
+          context_prompt += f"{obs['stimulus'].tolist()}.\n"
+        elif step_id != -1:
+          context_prompt = context_prompt.replace(
+            f"\nStarting game #{game_id}, this is the new stimulus: ",
+            f"\nAt game #{game_id}, you are observing stimulus: ",
+          )
+          #context_prompt += f"\nAt game #{game_id}, step #{step_id}, you are observing the "
+          #context_prompt += f"following stimulus: {obs['stimulus'].tolist()}.\n"
+          if step_id != 0:
+            context_prompt += f"You have sent the following message: {prev_comm_channel_char}.\n"
+            if self.allow_listener_query:
+              context_prompt += f"Your partner has sent you the following message: {comm_channel_char}.\n"
+        else:
+          # No update:
+          #context_prompt += "\n"
+          context_prompt += f"\nAt the end of game #{game_id}, here is a special step "
+          context_prompt += f"where your partner is being shown the exact stimulus that you "
+          context_prompt += f"observe.\n"
+          #context_prompt += f" It is an opportunity for them to sync with you by verifying "
+          #context_prompt += f"that they understood your message.\n"
+        
+        self.speaker_context_prompt = context_prompt
+
+        question_prompt = f"\nYou are an expert in the matter. Given the information above, answer the following question(s) to the best of your abilities.\n\n"
+
+        question_prompt += f"Question #1: Do you think your partner understands your messages?\n"
+        question_prompt += f"Answer either 0.:'Yes' or 1.:'No'.\n\n"
+
+        question_prompt += f"Question #2: What message should you send to your partner to better "
+        question_prompt += f"coordinate together towards fulfilling your common goal?\n"
+        question_prompt += f"The message is made up of {self.max_sentence_length} symbols, "
+        question_prompt += f"each of which can be filled with one of the {self.vocab_size+1} "
+        question_prompt += f"vocab symbols. For example: "
+        question_prompt += f"{self.communication_channel_action_space.sample()[0].tolist()}.\n"
+        question_prompt += f"This question corresponds to {self.max_sentence_length} implicit "
+        question_prompt += f"questions, one for each of the {self.max_sentence_length} symbols "
+        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size}, corresponding to one of the {self.vocab_size+1} vocab symbols.\n"
+         
+        speaker_prompt = context_prompt+question_prompt
+        
+        # Eventhough we only ask two questions, we want to retrieve a message of length 
+        # max_sentence_length in the second one, where each positions can be filled with 
+        # one of the vocab symbols.
+        speaker_prompt += f"\n[NBR_QUESTIONS]{self.max_sentence_length+1}[/NBR_QUESTIONS]\n"
+        speaker_prompt += f"[MAX_NBR_OPTIONS]{max(2,self.vocab_size)}[/MAX_NBR_OPTIONS]\n"
+
+        bt_speaker_prompt = STR2BT(speaker_prompt, max_sentence_length=self.max_prompt_sentence_length)
+        return bt_speaker_prompt, speaker_prompt
+    
+    def _update_listener_prompt(self, obs, info, context_prompt=""):
+        ''' 
+        Update the prompt based on the current observation.
+        TODO: update to multiple distractor stimuli and allow listener query...
+        '''
+        assert self.nbr_distractors == 0
+        assert not self.allow_listener_query
+
+        round_idx_reward = 0
+        if self.listener_feedback:
+            round_idx_reward = -1
+
+        game_id = info['stimulus_idx']
+        step_id = info['round_idx']
+ 
+        if context_prompt == "": 
+          context_prompt = f"You and your partner are playing a sequence of referential games. "
+          context_prompt += f"You are the listener.\n"
+          context_prompt += f"Your partner has id {obs['other_agent_id']}.\n"
+          
+          context_prompt += f"In the first phase, you will get accounted with "
+          context_prompt += f"the atomic components of the possible observations. "
+          context_prompt += f"Then, the game counter will restart, and you will be tested with "
+          context_prompt += f"new observations, combining the same atomic components in novel ways.\n"
+          
+          context_prompt += f"At each game, each of you observes a stimulus, "
+          context_prompt += f"which represents a latent meaning, "
+          context_prompt += f"and your common goal is to figure out whether you are observing "
+          context_prompt += f"different or similar latent meanings. "
+          context_prompt += f"To help you do so, your partner can send you messages using the "
+          context_prompt += f"communication channel, which is made up of {self.vocab_size+1} symbols "
+          context_prompt += f"that can be combined together to form a sentence of maximum length "
+          context_prompt += f"{self.max_sentence_length}.\n"
+          context_prompt += f"Beware that symbol 0 is grounded already. "
+          context_prompt += f"It is the end-of-message symbol. "
+          context_prompt += f"It means that any symbol that comes after it will be ignored "
+          context_prompt += f"and regularised into symbol 0.\n"
+        else:
+          context_prompt = context_prompt.replace("are observing", "have observed")
+          context_prompt = context_prompt.replace("partner has sent", "partner had sent")
+          context_prompt = context_prompt.replace(
+            "this is the exact stimulus that your partner was observing",
+            "this was the exact stimulus that your partner was observing",
+          )
+          '''
+          context_prompt = context_prompt.replace("partner observes", "partner had observed")
+          context_prompt = context_prompt.replace("here is a ", "there was a ")
+          context_prompt = context_prompt.replace("this is the exact ", "this was the exact ")
+          context_prompt = context_prompt.replace("you are given", "you were given")
+          '''
+          context_prompt = context_prompt.replace(
+            f"\nAt the end of game #{game_id-1}, here is a special step "
+            + f"where you are given an opportunity to sync with your partner: "
+            + f"this is the exact stimulus that "
+            + f"your partner observes",
+            f"\nIn game #{game_id-1}, this is the exact stimulus that "
+            + f"your partner was observing",
+          )
+          # Provide results about the previous game:
+          if step_id == round_idx_reward:
+            context_prompt += f"You have decided that both of you were observing "
+            if self.listener_actions["decision"] > 0 :# TODO == self.sample["target_decision_idx"].item():
+              context_prompt += "different latent meanings.\n"
+            else:
+              context_prompt += "similar latent meanings.\n"
+            successful_game = self.listener_actions["decision"] == self.sample["target_decision_idx"].item()
+            if successful_game:
+              context_prompt += f"This was correct. " 
+            else:
+              context_prompt += f"This was incorrect. " 
+            context_prompt += f"You and your partner have "
+            context_prompt += f"{'won' if successful_game else'lost'} "
+            context_prompt += f"game #{game_id}.\n"
+
+        if step_id == 0:
+          context_prompt += f"\nStarting game #{game_id}, this is the new stimulus: "
+          context_prompt += f"{obs['stimulus'].tolist()}.\n"
+        elif step_id != -1:
+          context_prompt = context_prompt.replace(
+            f"\nStarting game #{game_id}, this is the new stimulus: ",
+            f"\nAt game #{game_id}, you are observing stimulus: ",
+          )
+          #context_prompt += f"\nAt game #{game_id}, step #{step_id}, you are observing the "
+          #context_prompt += f"following stimulus: {obs['stimulus'].tolist()}.\n"
+        else:
+          context_prompt += f"\nAt the end of game #{game_id}, here is a special step "
+          context_prompt += f"where you are given an opportunity to sync with your partner: "
+          context_prompt += f"this is the exact stimulus that "
+          context_prompt += f"your partner observes: {obs['stimulus'].tolist()}.\n"
+
+        comm_channel_char = obs['communication_channel'][0].astype(int).tolist()
+        #comm_channel_char = [chr(i) for i in obs['communication_channel'][0].astype(int).tolist()]
+        
+        if step_id != 0 \
+        and step_id != -1:
+          context_prompt += f"Your partner has sent you the following message: "
+          context_prompt += f"{comm_channel_char}.\n"
+
+        self.listener_context_prompt = context_prompt
+        
+        question_prompt = f"\nYou are an expert in the matter. Given the information above, answer the following question(s) to the best of your abilities.\n\n"
+        
+        question_prompt += f"Question #1: Are you observing a stimulus representing the same latent meaning as the stimulus observed by your partner?\n"
+        question_prompt += f"Answer either 0.:'Yes' or 1.:'No'.\n\n"
+
+        question_prompt += f"Question #2: What message should you send your partner "
+        question_prompt += f"to better coordinate with them towards fulfilling your common goal?\n"
+        question_prompt += f"The message is made up of {self.max_sentence_length} symbols, "
+        question_prompt += f"each of which can be filled with one of the {self.vocab_size+1} "
+        question_prompt += f"vocab symbols. For example: "
+        question_prompt += f"{self.communication_channel_action_space.sample()[0].tolist()}.\n"
+        question_prompt += f"This question corresponds to {self.max_sentence_length} implicit "
+        question_prompt += f"questions, one for each of the {self.max_sentence_length} symbols "
+        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size}, corresponding to one of the {self.vocab_size+1} vocab symbols.\n"
+         
+        listener_prompt = context_prompt+question_prompt
+        
+        # Eventhough we only ask two questions, we want to retrieve a message of length 
+        # max_sentence_length in the second one, where each positions can be filled with 
+        # one of the vocab symbols.
+        listener_prompt += f"\n[NBR_QUESTIONS]{self.max_sentence_length+1}[/NBR_QUESTIONS]\n"
+        listener_prompt += f"[MAX_NBR_OPTIONS]{max(2,self.vocab_size)}[/MAX_NBR_OPTIONS]\n"
+
+        bt_listener_prompt = STR2BT(listener_prompt, max_sentence_length=self.max_prompt_sentence_length)
+        return bt_listener_prompt, listener_prompt
+    
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return seed 
@@ -277,6 +535,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
     def _gen_obs_info(self, reset=False):
         if reset:
+            # Context prompts:
+            self.speaker_context_prompt = ""
+            self.listener_context_prompt = ""
+
             #self.datasets["train"].datasets["train"].reset()
             self.datasets['test'].reset()
             # it is sufficient to reset the test duallabeled dataset
@@ -408,9 +670,25 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         else:
             self.feedback_provided = False 
 
+        # Speaker and Listener prompts:
+        if self.include_prompts:
+            self.bt_speaker_prompt, self.speaker_prompt = self._update_speaker_prompt(
+                obs=speaker_obs,
+                info=info,
+                context_prompt=self.speaker_context_prompt,
+            )
+            self.bt_listener_prompt, self.listener_prompt = self._update_listener_prompt(
+                obs=listener_obs,
+                info=info,
+                context_prompt=self.listener_context_prompt,
+            )
+        
         self.observations = [speaker_obs, listener_obs]
         self.infos = [copy.deepcopy(info) for _ in range(self.nbr_players)]
-        
+        if self.include_prompts:
+            self.infos[0]["prompt"] = self.bt_speaker_prompt
+            self.infos[1]["prompt"] = self.bt_listener_prompt
+         
         # Bookkeeping: setting values for next call:
         self.round_idx = (self.round_idx+1)%(self.nbr_communication_rounds+1)
         
