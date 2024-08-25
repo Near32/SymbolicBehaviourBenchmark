@@ -397,7 +397,7 @@ def test_env_llm_prompt(
     foutput = output
     while ok:
         it = foutput[-1][0]['stimulus_idx']
-        it = it % (vocab_size+1)
+        it = it % vocab_size
         #if render:
         #    env.render(mode='human')
         speaker_action = {'decision':0, 'communication_channel': np.ones((1,5))*it}

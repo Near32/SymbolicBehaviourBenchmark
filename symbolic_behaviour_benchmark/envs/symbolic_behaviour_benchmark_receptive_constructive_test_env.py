@@ -163,6 +163,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         nbr_shots=1,
         max_prompt_sentence_length=2**16,
         include_prompts=False,
+        floating_point_precision=3,
         **kwargs,
     ):  
         super(SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv, self).__init__()
@@ -186,6 +187,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.feedback_provided = False
         self.max_prompt_sentence_length = max_prompt_sentence_length
         self.include_prompts = include_prompts
+        self.floating_point_precision = floating_point_precision
 
         # 3D Renderer:
         self.renderer = None
@@ -272,6 +274,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         TODO: update to multiple distractor stimuli...
         '''
         assert self.nbr_distractors == 0
+        printoptions = np.get_printoptions()
+        np.set_printoptions(formatter={'float_kind': lambda x: f"%.{self.floating_point_precision}f" % x})
 
         round_idx_reward = 0
         if self.listener_feedback:
@@ -344,14 +348,14 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
         if step_id == 0:
           context_prompt += f"\nStarting game #{game_id}, this is the new stimulus: "
-          context_prompt += f"{obs['stimulus'].tolist()}.\n"
+          context_prompt += f"{obs['stimulus'].reshape(-1).numpy()}.\n"
         elif step_id != -1:
           context_prompt = context_prompt.replace(
             f"\nStarting game #{game_id}, this is the new stimulus: ",
             f"\nAt game #{game_id}, you are observing stimulus: ",
           )
           #context_prompt += f"\nAt game #{game_id}, step #{step_id}, you are observing the "
-          #context_prompt += f"following stimulus: {obs['stimulus'].tolist()}.\n"
+          #context_prompt += f"following stimulus: {obs['stimulus'].reshape(-1).numpy()}.\n"
           if step_id != 0:
             context_prompt += f"You have sent the following message: {prev_comm_channel_char}.\n"
             if self.allow_listener_query:
@@ -391,6 +395,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         speaker_prompt += f"[MAX_NBR_OPTIONS]{max(2,self.vocab_size)}[/MAX_NBR_OPTIONS]\n"
 
         bt_speaker_prompt = STR2BT(speaker_prompt, max_sentence_length=self.max_prompt_sentence_length)
+        np.set_printoptions(**printoptions) 
         return bt_speaker_prompt, speaker_prompt
     
     def _update_listener_prompt(self, obs, info, context_prompt=""):
@@ -400,6 +405,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         '''
         assert self.nbr_distractors == 0
         assert not self.allow_listener_query
+        printoptions = np.get_printoptions()
+        np.set_printoptions(formatter={'float_kind': lambda x: f"%.{self.floating_point_precision}f" % x})
 
         round_idx_reward = 0
         if self.listener_feedback:
@@ -469,19 +476,19 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
         if step_id == 0:
           context_prompt += f"\nStarting game #{game_id}, this is the new stimulus: "
-          context_prompt += f"{obs['stimulus'].tolist()}.\n"
+          context_prompt += f"{obs['stimulus'].reshape(-1).numpy()}.\n"
         elif step_id != -1:
           context_prompt = context_prompt.replace(
             f"\nStarting game #{game_id}, this is the new stimulus: ",
             f"\nAt game #{game_id}, you are observing stimulus: ",
           )
           #context_prompt += f"\nAt game #{game_id}, step #{step_id}, you are observing the "
-          #context_prompt += f"following stimulus: {obs['stimulus'].tolist()}.\n"
+          #context_prompt += f"following stimulus: {obs['stimulus'].reshape(-1).numpy()}.\n"
         else:
           context_prompt += f"\nAt the end of game #{game_id}, here is a special step "
           context_prompt += f"where you are given an opportunity to sync with your partner: "
           context_prompt += f"this is the exact stimulus that "
-          context_prompt += f"your partner observes: {obs['stimulus'].tolist()}.\n"
+          context_prompt += f"your partner observes: {obs['stimulus'].reshape(-1).numpy()}.\n"
 
         comm_channel_char = obs['communication_channel'][0].astype(int).tolist()
         #comm_channel_char = [chr(i) for i in obs['communication_channel'][0].astype(int).tolist()]
@@ -517,6 +524,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         listener_prompt += f"[MAX_NBR_OPTIONS]{max(2,self.vocab_size)}[/MAX_NBR_OPTIONS]\n"
 
         bt_listener_prompt = STR2BT(listener_prompt, max_sentence_length=self.max_prompt_sentence_length)
+        np.set_printoptions(**printoptions) 
         return bt_listener_prompt, listener_prompt
     
     def seed(self, seed=None):
