@@ -7,13 +7,13 @@ import copy
 class PositionallyDisentangledListenerAgent(object):
     def __init__(
         self,
-        action_space_dim:object, 
+        action_space:object, 
         vocab_size:int,
         max_sentence_length:int,
         nbr_communication_rounds:int,
         nbr_latents:int,
         ):
-        self.action_space_dim = action_space_dim
+        self.action_space= action_space
         self.vocab_size = vocab_size
         self.max_sentence_length = max_sentence_length
         self.nbr_communication_rounds = nbr_communication_rounds
@@ -105,14 +105,14 @@ from ..utils.agent_wrappers import RuleBasedAgentWrapper
 
 def build_WrappedPositionallyDisentangledListenerAgent(
         player_idx:int, 
-        action_space_dim:object, 
+        action_space:object, 
         vocab_size:int,
         max_sentence_length:int,
         nbr_communication_rounds:int,
         nbr_latents:int,
         ):
 	agent = PositionallyDisentangledListenerAgent(
-            action_space_dim=action_space_dim, 
+            action_space=action_space, 
             vocab_size=vocab_size,
             max_sentence_length=max_sentence_length,
             nbr_communication_rounds=nbr_communication_rounds,

@@ -10,7 +10,7 @@ class RuleBasedAgentWrapper(object):
         nbr_actors:int
         ):
         self.nbr_actors = nbr_actors
-        self.action_space_dim = ruleBasedAgent.action_space_dim
+        self.action_space_dim = ruleBasedAgent.action_space.n
         self.vocab_size = ruleBasedAgent.vocab_size
         self.max_sentence_length = ruleBasedAgent.max_sentence_length
         self.nbr_communication_rounds = ruleBasedAgent.nbr_communication_rounds
@@ -146,6 +146,109 @@ class RuleBasedAgentWrapper(object):
             
             actions[pidx] = self._encode_action(action_dict=next_action_dict, info_dict=infos[pidx])
             
+        return actions
+
+
+class MultiDiscreteRuleBasedAgentWrapper(object):
+    def __init__(
+        self, 
+        ruleBasedAgent:object, 
+        player_idx:int, 
+        nbr_actors:int
+        ):
+        self.nbr_actors = nbr_actors
+        self.nbr_action_dims = ruleBasedAgent.action_space.nvec
+        self.vocab_size = ruleBasedAgent.vocab_size
+        self.max_sentence_length = ruleBasedAgent.max_sentence_length
+        self.nbr_communication_rounds = ruleBasedAgent.nbr_communication_rounds
+        self.nbr_latents = ruleBasedAgent.nbr_latents
+        
+        self.training = False
+        self.player_idx = player_idx
+        self.original_ruleBasedAgent = ruleBasedAgent
+        self.ruleBasedAgents = []
+        self.reset_actors()
+        
+        self.nb_decisions = self.nbr_action_dims[0]
+        self.max_possible_actions = max(self.nb_decisions, self.vocab_size+1)
+        
+    def _encode_action(self, action_dict, info_dict=None):
+        original_action_decision_id = action_dict['decision']
+        original_action_sentence = action_dict['communication_channel']
+       
+        encoded_action = np.zeros((len(self.nbr_action_dims),)) 
+        encoded_action[0] = original_action_decision_id.item()
+        encoded_action[1:] = original_action_sentence
+
+        return encoded_action
+    
+    def clone(self, **kwargs):
+        cloned_agent = copy.deepcopy(self)
+        cloned_agent.reset_actors()
+        return cloned_agent
+
+    @property
+    def handled_experiences(self):
+        return 0
+
+    @handled_experiences.setter
+    def handled_experiences(self, val):
+        pass
+
+    def get_experience_count(self):
+        return self.handled_experiences
+
+    def get_update_count(self):
+        return 0
+
+    def get_nbr_actor(self) -> int:
+        return self.nbr_actors
+
+    def parameters(self):
+        return []
+
+    def set_nbr_actor(self, nbr_actors:int):
+        self.nbr_actors = nbr_actors
+        self.reset_actors()
+
+    def get_rnn_states(self):
+        return copy.deepcopy(self.ruleBasedAgents)
+
+    def set_rnn_states(self, rnn_states):
+        self.ruleBasedAgents = rnn_states
+
+    def reset_actors(self, indices:List[int]=None):
+        if indices is None: indices = list(range(self.nbr_actors))
+        
+        for idx in indices:
+            if len(self.ruleBasedAgents) <= idx:
+                self.ruleBasedAgents.append(copy.deepcopy(self.original_ruleBasedAgent))
+                continue
+            self.ruleBasedAgents[idx] = copy.deepcopy(self.original_ruleBasedAgent)
+            self.ruleBasedAgents[idx].reset()
+    
+    def get_hidden_state(self):
+        return [self.ruleBasedAgents[a].get_hidden_state() for a in range(self.nbr_actors)]
+
+    def query_action(self, state, infos, as_logit=False):
+        return self.take_action(state=state, infos=infos, as_logit=as_logit)
+    
+    def take_action(self, state, infos, as_logit=False):
+        """
+        Convert the :param state: and :param infos:
+        into the input that the rule-based agent expects. 
+        """
+
+        actions = []        
+        for pidx in range(self.nbr_actors):
+            next_action_dict = self.ruleBasedAgents[pidx].next_action(
+                state=state[pidx], 
+                infos=infos[pidx]
+            )
+            
+            action = self._encode_action(action_dict=next_action_dict, info_dict=infos[pidx])
+            actions.append(action)
+        actions = np.stack(actions, axis=0)
         return actions
 
 

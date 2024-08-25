@@ -6,13 +6,13 @@ import copy
 class PositionallyDisentangledSpeakerAgent(object):
     def __init__(
         self,
-        action_space_dim:object, 
+        action_space:object, 
         vocab_size:int,
         max_sentence_length:int,
         nbr_communication_rounds:int,
         nbr_latents:int,
         ):
-        self.action_space_dim = action_space_dim
+        self.action_space= action_space
         self.vocab_size = vocab_size
         self.max_sentence_length = max_sentence_length
         self.nbr_communication_rounds = nbr_communication_rounds
@@ -94,25 +94,34 @@ class PositionallyDisentangledSpeakerAgent(object):
 
 
 from ..utils.agent_wrappers import RuleBasedAgentWrapper
+from ..utils.agent_wrappers import MultiDiscreteRuleBasedAgentWrapper
 
 def build_WrappedPositionallyDisentangledSpeakerAgent(
         player_idx:int, 
-        action_space_dim:object, 
+        action_space:object, 
         vocab_size:int,
         max_sentence_length:int,
         nbr_communication_rounds:int,
         nbr_latents:int,
+        multi_discrete:bool = False,
         ):
-	agent = PositionallyDisentangledSpeakerAgent(
-            action_space_dim=action_space_dim, 
-            vocab_size=vocab_size,
-            max_sentence_length=max_sentence_length,
-            nbr_communication_rounds=nbr_communication_rounds,
-            nbr_latents=nbr_latents,
-        )
-	wrapped_agent = RuleBasedAgentWrapper(
-		ruleBasedAgent=agent, 
-		player_idx=player_idx, 
-		nbr_actors = 1
-	)
-	return wrapped_agent
+  agent = PositionallyDisentangledSpeakerAgent(
+    action_space=action_space, 
+    vocab_size=vocab_size,
+    max_sentence_length=max_sentence_length,
+    nbr_communication_rounds=nbr_communication_rounds,
+    nbr_latents=nbr_latents,
+  )
+  if multi_discrete:
+    wrapped_agent = MultiDiscreteRuleBasedAgentWrapper(
+      ruleBasedAgent=agent, 
+      player_idx=player_idx, 
+      nbr_actors = 1
+    )
+  else:
+    wrapped_agent = RuleBasedAgentWrapper(
+      ruleBasedAgent=agent, 
+      player_idx=player_idx, 
+      nbr_actors = 1
+    )
+  return wrapped_agent

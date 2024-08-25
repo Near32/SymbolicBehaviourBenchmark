@@ -150,6 +150,90 @@ class DiscreteCombinedActionWrapper(gym.Wrapper):
         return next_observations, reward, done, copy.deepcopy(self.infos)
 
 
+class MultiDiscreteCombinedActionWrapper(gym.Wrapper):
+    """
+    Assumes the :arg env: environment's action space is a Dict that contains 
+    the keys "communication_channel" and "decision".
+    Firstly, it combines both spaces into a MultiDiscrete action space.
+    Secondly, it augments the infos list of dictionnary with entries 
+    "legal_actions" and "action_mask", for each player's info. 
+    Args:
+        - env (gym.Env): Env to wrap.
+    """
+    def __init__(self, env):
+        super(MultiDiscreteCombinedActionWrapper, self).__init__(env)
+        self.wrapped_action_space = env.action_space 
+        
+        self.vocab_size = self.wrapped_action_space.spaces["communication_channel"].vocab_size
+        self.max_sentence_length = self.wrapped_action_space.spaces["communication_channel"].max_sentence_length
+
+        self.nb_decisions = self.wrapped_action_space.spaces["decision"].n 
+        
+        # Action Space:
+        self.max_possible_actions = max(self.nb_decisions, self.vocab_size+1)
+        self.nbr_action_dims = self.max_sentence_length+1
+        self.action_space = gym.spaces.MultiDiscrete([self.max_possible_actions]*self.nbr_action_dims)
+
+        self.observation_space = env.observation_space
+
+    def _make_infos(self, observations, infos):
+        self.infos = []
+
+        # TODO: Adapt info's legal_actions: so far everything is allowed.
+        # But it is not a problem because the environment will ignore what is irrelevant.
+        for player_idx in range(self.nbr_agent):
+            action_mask=np.ones((1, self.nbr_action_dims, self.max_possible_actions))
+            
+            info = copy.deepcopy(infos[player_idx])
+            info['action_mask'] = action_mask
+            info['legal_actions'] = action_mask
+            self.infos.append(info)
+
+    def reset(self, **kwargs):
+        observations, infos = self.env.reset(**kwargs)
+        
+        self.nbr_agent = len(infos)
+        
+        self._make_infos(observations, infos)
+
+        return observations, copy.deepcopy(self.infos) 
+
+    def _decode_action(self, action):
+        action_dicts = []
+        for pidx in range(len(action)):
+            pidx_a = action[pidx]
+            ad = {
+                'decision':pidx_a[0].item() if isinstance(pidx_a[0], np.ndarray) else pidx_a[0],
+                'communication_channel':pidx_a[1:].reshape((1,-1)),
+            }
+
+            action_dicts.append(ad)
+        
+        return action_dicts
+
+    def _encode_action(self, action_dict):
+        original_action_decision_id = action_dict['decision']
+        original_action_sentence = action_dict['communication_channel']
+       
+        import ipdb; ipdb.set_trace()
+        encoded_action = np.zeros(self.action_space.nvec) 
+        encoded_action[0] = original_action_decision_id
+        encoded_action[1:] = original_action_sentence
+
+        return encoded_action
+    
+    def step(self, action):
+        original_action = self._decode_action(action)
+
+        next_observations, reward, done, next_infos = self.env.step(original_action)
+
+        self.nbr_agent = len(next_infos)
+        
+        self._make_infos(next_observations, next_infos)
+
+        return next_observations, reward, done, copy.deepcopy(self.infos)
+
+
 class MultiBinaryCommunicationChannelWrapper(gym.Wrapper):
     """
     Assumes the :arg env: environment to have a Dict observation space,
@@ -254,8 +338,10 @@ class StimulusObservationWrapper(gym.Wrapper):
             **kwargs,
         )
         
-def s2b_wrap(env, combined_actions=False, dict_obs_space=False, multi_binary_comm=False):
-    if combined_actions:
+def s2b_wrap(env, combined_actions=False, multi_discrete_combined_actions=False, dict_obs_space=False, multi_binary_comm=False):
+    if multi_discrete_combined_actions:
+        env = MultiDiscreteCombinedActionWrapper(env)
+    elif combined_actions:
         env = DiscreteCombinedActionWrapper(env)
     if multi_binary_comm \
     and any([("communication_channel" in k) for k in env.unwrapped.observation_space]):

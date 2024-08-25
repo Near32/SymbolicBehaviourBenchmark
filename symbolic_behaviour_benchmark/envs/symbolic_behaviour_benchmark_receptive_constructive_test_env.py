@@ -55,7 +55,7 @@ class CommunicationChannelPermutation(object):
         self.env = env 
         self.identity = identity
 
-        self.vocab_size = self.env.vocab_size
+        self.vocab_size = self.env.vocab_size-1 # in order to account for EoS
         self.max_sentence_length = self.env.max_sentence_length
         
         self.reset()
@@ -257,7 +257,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         })
         
         self.per_player_permutation = [
-            CommunicationChannelPermutation(env=self, identity=not(self.use_communication_channel_permutations))
+            CommunicationChannelPermutation(
+                env=self, 
+                identity=not(self.use_communication_channel_permutations),
+            )
             for _ in range(self.nbr_players)
         ]
 
@@ -292,7 +295,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
           context_prompt += f"and your common goal is to figure out whether you are observing "
           context_prompt += f"different or similar latent meanings. "
           context_prompt += f"You can communicate with your partner using the communication channel. "
-          context_prompt += f"The communication channel is made up of {self.vocab_size+1} symbols "
+          context_prompt += f"The communication channel is made up of {self.vocab_size} symbols "
           context_prompt += f"that you can combine together to form a sentence of "
           context_prompt += f"maximum length {self.max_sentence_length}. "
           context_prompt += f"Beware that symbol 0 is grounded already. "
@@ -372,12 +375,12 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         question_prompt += f"Question #2: What message should you send to your partner to better "
         question_prompt += f"coordinate together towards fulfilling your common goal?\n"
         question_prompt += f"The message is made up of {self.max_sentence_length} symbols, "
-        question_prompt += f"each of which can be filled with one of the {self.vocab_size+1} "
+        question_prompt += f"each of which can be filled with one of the {self.vocab_size} "
         question_prompt += f"vocab symbols. For example: "
         question_prompt += f"{self.communication_channel_action_space.sample()[0].tolist()}.\n"
         question_prompt += f"This question corresponds to {self.max_sentence_length} implicit "
         question_prompt += f"questions, one for each of the {self.max_sentence_length} symbols "
-        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size}, corresponding to one of the {self.vocab_size+1} vocab symbols.\n"
+        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size-1}, corresponding to one of the {self.vocab_size} vocab symbols.\n"
          
         speaker_prompt = context_prompt+question_prompt
         
@@ -420,7 +423,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
           context_prompt += f"and your common goal is to figure out whether you are observing "
           context_prompt += f"different or similar latent meanings. "
           context_prompt += f"To help you do so, your partner can send you messages using the "
-          context_prompt += f"communication channel, which is made up of {self.vocab_size+1} symbols "
+          context_prompt += f"communication channel, which is made up of {self.vocab_size} symbols "
           context_prompt += f"that can be combined together to form a sentence of maximum length "
           context_prompt += f"{self.max_sentence_length}.\n"
           context_prompt += f"Beware that symbol 0 is grounded already. "
@@ -498,12 +501,12 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         question_prompt += f"Question #2: What message should you send your partner "
         question_prompt += f"to better coordinate with them towards fulfilling your common goal?\n"
         question_prompt += f"The message is made up of {self.max_sentence_length} symbols, "
-        question_prompt += f"each of which can be filled with one of the {self.vocab_size+1} "
+        question_prompt += f"each of which can be filled with one of the {self.vocab_size} "
         question_prompt += f"vocab symbols. For example: "
         question_prompt += f"{self.communication_channel_action_space.sample()[0].tolist()}.\n"
         question_prompt += f"This question corresponds to {self.max_sentence_length} implicit "
         question_prompt += f"questions, one for each of the {self.max_sentence_length} symbols "
-        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size}, corresponding to one of the {self.vocab_size+1} vocab symbols.\n"
+        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size-1}, corresponding to one of the {self.vocab_size} vocab symbols.\n"
          
         listener_prompt = context_prompt+question_prompt
         
