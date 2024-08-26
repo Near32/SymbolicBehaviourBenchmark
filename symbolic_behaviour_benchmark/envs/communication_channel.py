@@ -21,7 +21,10 @@ class CommunicationChannel(MultiDiscrete):
         assert (max_sentence_length > 0) and (vocab_size > 0)
         self.max_sentence_length = max_sentence_length
         self.vocab_size = vocab_size
-        super(CommunicationChannel, self).__init__(nvec=[self.vocab_size+1]*self.max_sentence_length)
+        # WARNING: check that vocab_size already contains the EoS symbol:
+        # Previously: super(CommunicationChannel, self).__init__(nvec=[self.vocab_size+1]*self.max_sentence_length)
+        # Now: 
+        super(CommunicationChannel, self).__init__(nvec=[self.vocab_size]*self.max_sentence_length)
 
     def sample(self):
         output = self.np_random.random_sample(self.max_sentence_length)
