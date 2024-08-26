@@ -287,7 +287,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         if context_prompt == "": 
           context_prompt = f"You and your partner are playing a sequence of referential games. "
           context_prompt += f"You are the speaker.\n"
-          context_prompt += f"Your partner has id {obs['other_agent_id']}.\n"
+          # TODO: context_prompt += f"Your partner has id {obs['other_agent_id']}.\n"
           
           context_prompt += f"In the first phase, you will get accounted with "
           context_prompt += f"the atomic components of the possible observations. "
@@ -418,7 +418,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         if context_prompt == "": 
           context_prompt = f"You and your partner are playing a sequence of referential games. "
           context_prompt += f"You are the listener.\n"
-          context_prompt += f"Your partner has id {obs['other_agent_id']}.\n"
+          # TODO: context_prompt += f"Your partner has id {obs['other_agent_id']}.\n"
           
           context_prompt += f"In the first phase, you will get accounted with "
           context_prompt += f"the atomic components of the possible observations. "
