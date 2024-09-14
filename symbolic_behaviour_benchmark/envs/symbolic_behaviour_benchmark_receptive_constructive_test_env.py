@@ -502,7 +502,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         
         question_prompt = f"\nYou are an expert in the matter. Given the information above, answer the following question(s) to the best of your abilities.\n\n"
         
-        question_prompt += f"Question #1: Are you observing a stimulus representing the same latent meaning as the stimulus observed by your partner?\n"
+        question_prompt += f"Question #1: At the current game #{game_id}, do think that you are observing a stimulus representing the same latent meaning as the stimulus that your partner is observing?\n"
         question_prompt += f"Answer either 0.:'Yes' or 1.:'No'.\n\n"
 
         question_prompt += f"Question #2: What message should you send your partner "
