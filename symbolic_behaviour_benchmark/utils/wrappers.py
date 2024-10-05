@@ -18,7 +18,8 @@ class DiscreteCombinedActionWrapper(gym.Wrapper):
         super(DiscreteCombinedActionWrapper, self).__init__(env)
         self.wrapped_action_space = env.action_space 
         
-        self.vocab_size = self.wrapped_action_space.spaces["communication_channel"].vocab_size
+        # This wrapper requires the true vocab_size, that does not account for EoS symbol:
+        self.vocab_size = self.wrapped_action_space.spaces["communication_channel"].vocab_size-1
         self.max_sentence_length = self.wrapped_action_space.spaces["communication_channel"].max_sentence_length
 
         self.nb_decisions = self.wrapped_action_space.spaces["decision"].n 
