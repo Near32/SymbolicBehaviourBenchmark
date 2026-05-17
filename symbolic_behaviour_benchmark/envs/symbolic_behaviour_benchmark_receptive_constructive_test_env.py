@@ -289,7 +289,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
           context_prompt += f"You are the speaker.\n"
           # TODO: context_prompt += f"Your partner has id {obs['other_agent_id']}.\n"
           
-          context_prompt += f"In the first phase, you will get accounted with "
+          context_prompt += f"In the first phase, you will get acquainted with "
           context_prompt += f"the atomic components of the possible observations. "
           context_prompt += f"Then, the game counter will restart, and you will be tested with "
           context_prompt += f"new observations, combining the same atomic components in novel ways.\n"
@@ -380,11 +380,11 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         question_prompt += f"coordinate together towards fulfilling your common goal?\n"
         question_prompt += f"The message is made up of {self.max_sentence_length} symbols, "
         question_prompt += f"each of which can be filled with one of the {self.vocab_size} "
-        question_prompt += f"vocab symbols. For example: "
+        question_prompt += f"vocabulary symbols. For example: "
         question_prompt += f"{self.communication_channel_action_space.sample()[0].tolist()}.\n"
         question_prompt += f"This question corresponds to {self.max_sentence_length} implicit "
         question_prompt += f"questions, one for each of the {self.max_sentence_length} symbols "
-        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size-1}, corresponding to one of the {self.vocab_size} vocab symbols.\n"
+        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size-1}, corresponding to one of the {self.vocab_size} vocabulary symbols.\n"
          
         speaker_prompt = context_prompt+question_prompt
         
@@ -420,7 +420,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
           context_prompt += f"You are the listener.\n"
           # TODO: context_prompt += f"Your partner has id {obs['other_agent_id']}.\n"
           
-          context_prompt += f"In the first phase, you will get accounted with "
+          context_prompt += f"In the first phase, you will get acquainted with "
           context_prompt += f"the atomic components of the possible observations. "
           context_prompt += f"Then, the game counter will restart, and you will be tested with "
           context_prompt += f"new observations, combining the same atomic components in novel ways.\n"
@@ -509,11 +509,11 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         question_prompt += f"to better coordinate with them towards fulfilling your common goal?\n"
         question_prompt += f"The message is made up of {self.max_sentence_length} symbols, "
         question_prompt += f"each of which can be filled with one of the {self.vocab_size} "
-        question_prompt += f"vocab symbols. For example: "
+        question_prompt += f"vocabulary symbols. For example: "
         question_prompt += f"{self.communication_channel_action_space.sample()[0].tolist()}.\n"
         question_prompt += f"This question corresponds to {self.max_sentence_length} implicit "
         question_prompt += f"questions, one for each of the {self.max_sentence_length} symbols "
-        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size-1}, corresponding to one of the {self.vocab_size} vocab symbols.\n"
+        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size-1}, corresponding to one of the {self.vocab_size} vocabulary symbols.\n"
          
         listener_prompt = context_prompt+question_prompt
         
