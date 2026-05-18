@@ -201,6 +201,11 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self._stimulus_to_text = None
         if self.kwargs.get('domain', 'SCS') == 'categorical':
             base_ds = datasets['train'].datasets['train']
+            if not hasattr(base_ds, 'latent_class_to_text'):
+                raise TypeError(
+                    f"domain='categorical' requires a CategoricalStimulusDataset at "
+                    f"datasets['train'].datasets['train'], got {type(base_ds).__name__}"
+                )
             self._stimulus_to_text = base_ds.latent_class_to_text
 
         # Actions consist of a dictionnary of two elements:
@@ -226,7 +231,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         # -previous referential gamee's success boolean,
         # -a communication channel output (either from the speaker or listener agent).
         _stim_low = 0 if self.kwargs.get('domain', 'SCS') == 'categorical' else -1
-        _stim_high = (self.kwargs.get('max_nbr_values_per_latent', 10) - 1
+        _stim_high = (self.kwargs.get('max_nbr_values_per_latent', 5) - 1
                       if self.kwargs.get('domain', 'SCS') == 'categorical' else 1)
         self.stimulus_observation_space = spaces.Box(
             low=_stim_low,
