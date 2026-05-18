@@ -364,8 +364,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         prev_comm_channel_char = prev_speaker_utterance.astype(int).tolist()
 
         if step_id == 0:
+          _stim = obs['stimulus'].reshape(-1).numpy()
+          _stim_repr = str(self._stimulus_to_text(_stim)) if self._stimulus_to_text else str(_stim)
           context_prompt += f"\nStarting game #{game_id}, this is the new stimulus: "
-          context_prompt += f"{obs['stimulus'].reshape(-1).numpy()}.\n"
+          context_prompt += f"{_stim_repr}.\n"
         elif step_id != -1:
           context_prompt = context_prompt.replace(
             f"\nStarting game #{game_id}, this is the new stimulus: ",
@@ -429,11 +431,15 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
                 self._speaker_pending_feedback = ""
 
             if step_id == 0:
+                _stim = obs['stimulus'].reshape(-1).numpy()
+                _stim_repr = str(self._stimulus_to_text(_stim)) if self._stimulus_to_text else str(_stim)
                 step_text += (f"\nStarting game #{game_id}, this is the new stimulus: "
-                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+                              f"{_stim_repr}.\n")
             elif step_id != -1:
+                _stim = obs['stimulus'].reshape(-1).numpy()
+                _stim_repr = str(self._stimulus_to_text(_stim)) if self._stimulus_to_text else str(_stim)
                 step_text += (f"\nAt game #{game_id}, you are observing stimulus: "
-                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+                              f"{_stim_repr}.\n")
                 step_text += f"You have sent the following message: {prev_comm_channel_char}.\n"
                 if self.allow_listener_query:
                     step_text += (f"Your partner has sent you the following message: "
@@ -543,8 +549,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             context_prompt += f"game #{game_id}.\n"
 
         if step_id == 0:
+          _stim = obs['stimulus'].reshape(-1).numpy()
+          _stim_repr = str(self._stimulus_to_text(_stim)) if self._stimulus_to_text else str(_stim)
           context_prompt += f"\nStarting game #{game_id}, this is the new stimulus: "
-          context_prompt += f"{obs['stimulus'].reshape(-1).numpy()}.\n"
+          context_prompt += f"{_stim_repr}.\n"
         elif step_id != -1:
           context_prompt = context_prompt.replace(
             f"\nStarting game #{game_id}, this is the new stimulus: ",
@@ -553,10 +561,12 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
           #context_prompt += f"\nAt game #{game_id}, step #{step_id}, you are observing the "
           #context_prompt += f"following stimulus: {obs['stimulus'].reshape(-1).numpy()}.\n"
         else:
+          _stim = obs['stimulus'].reshape(-1).numpy()
+          _stim_repr = str(self._stimulus_to_text(_stim)) if self._stimulus_to_text else str(_stim)
           context_prompt += f"\nAt the end of game #{game_id}, here is a special step "
           context_prompt += f"where you are given an opportunity to sync with your partner: "
           context_prompt += f"this is the exact stimulus that "
-          context_prompt += f"your partner observes: {obs['stimulus'].reshape(-1).numpy()}.\n"
+          context_prompt += f"your partner observes: {_stim_repr}.\n"
 
         comm_channel_char = obs['communication_channel'][0].astype(int).tolist()
         #comm_channel_char = [chr(i) for i in obs['communication_channel'][0].astype(int).tolist()]
@@ -613,18 +623,24 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
                 self._listener_pending_feedback = ""
 
             if step_id == 0:
+                _stim = obs['stimulus'].reshape(-1).numpy()
+                _stim_repr = str(self._stimulus_to_text(_stim)) if self._stimulus_to_text else str(_stim)
                 step_text += (f"\nStarting game #{game_id}, this is the new stimulus: "
-                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+                              f"{_stim_repr}.\n")
             elif step_id != -1:
+                _stim = obs['stimulus'].reshape(-1).numpy()
+                _stim_repr = str(self._stimulus_to_text(_stim)) if self._stimulus_to_text else str(_stim)
                 step_text += (f"\nAt game #{game_id}, you are observing stimulus: "
-                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+                              f"{_stim_repr}.\n")
                 step_text += (f"Your partner has sent you the following message: "
                               f"{comm_channel_char}.\n")
             else:
+                _stim = obs['stimulus'].reshape(-1).numpy()
+                _stim_repr = str(self._stimulus_to_text(_stim)) if self._stimulus_to_text else str(_stim)
                 step_text += (f"\nAt the end of game #{game_id}, here is a special step "
                               f"where you are given an opportunity to sync with your partner: "
                               f"this is the exact stimulus that your partner observes: "
-                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+                              f"{_stim_repr}.\n")
 
             # Stash feedback text for prepending to the NEXT user turn.
             # Guard with hasattr to avoid accessing listener_actions before the
