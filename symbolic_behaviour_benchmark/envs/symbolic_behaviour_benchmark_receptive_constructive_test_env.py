@@ -12,7 +12,8 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 
-import logging 
+import re
+import logging
 import copy
 
 logger = logging.getLogger(__name__)
@@ -164,6 +165,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         max_prompt_sentence_length=2**16,
         include_prompts=False,
         floating_point_precision=3,
+        discussion_mode=False,
         **kwargs,
     ):  
         super(SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv, self).__init__()
@@ -188,12 +190,19 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.max_prompt_sentence_length = max_prompt_sentence_length
         self.include_prompts = include_prompts
         self.floating_point_precision = floating_point_precision
+        self.discussion_mode = discussion_mode
 
         # 3D Renderer:
         self.renderer = None
         if self.kwargs.get('domain', 'SCS') == '3D':
             self.renderer = PyBulletRenderer(N_dim=self.nbr_latents)
-        
+
+        # Categorical domain: text-conversion callable for prompt builders.
+        self._stimulus_to_text = None
+        if self.kwargs.get('domain', 'SCS') == 'categorical':
+            base_ds = datasets['train'].datasets['train']
+            self._stimulus_to_text = base_ds.latent_class_to_text
+
         # Actions consist of a dictionnary of two elements:
         # - decision that is discrete integer valued
         # - communication channel that consist of ungrounded tokens, represented as integer values.
@@ -216,9 +225,12 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         # -previous referential game's reward,
         # -previous referential gamee's success boolean,
         # -a communication channel output (either from the speaker or listener agent).
+        _stim_low = 0 if self.kwargs.get('domain', 'SCS') == 'categorical' else -1
+        _stim_high = (self.kwargs.get('max_nbr_values_per_latent', 10) - 1
+                      if self.kwargs.get('domain', 'SCS') == 'categorical' else 1)
         self.stimulus_observation_space = spaces.Box(
-            low=-1,
-            high=1,
+            low=_stim_low,
+            high=_stim_high,
             shape=((self.nbr_distractors+1)*rg_config.get('nbr_stimulus', 1)*self.nbr_latents, ),
             dtype=np.float32
         )
@@ -395,9 +407,61 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         speaker_prompt += f"[MAX_NBR_OPTIONS]{max(2,self.vocab_size)}[/MAX_NBR_OPTIONS]\n"
 
         bt_speaker_prompt = STR2BT(speaker_prompt, max_sentence_length=self.max_prompt_sentence_length)
-        np.set_printoptions(**printoptions) 
-        return bt_speaker_prompt, speaker_prompt
-    
+
+        # ── Discussion mode: also emit per-step and intro prompts ─────────────
+        bt_speaker_step_prompt = None
+        bt_speaker_intro_prompt = None
+        if self.discussion_mode:
+            if not self._speaker_intro_text:
+                intro_end = self.speaker_context_prompt.find("\nStarting game")
+                if intro_end == -1:
+                    intro_end = len(self.speaker_context_prompt)
+                self._speaker_intro_text = self.speaker_context_prompt[:intro_end].strip()
+
+            step_text = ""
+            if self._speaker_pending_feedback:
+                step_text += self._speaker_pending_feedback
+                self._speaker_pending_feedback = ""
+
+            if step_id == 0:
+                step_text += (f"\nStarting game #{game_id}, this is the new stimulus: "
+                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+            elif step_id != -1:
+                step_text += (f"\nAt game #{game_id}, you are observing stimulus: "
+                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+                step_text += f"You have sent the following message: {prev_comm_channel_char}.\n"
+                if self.allow_listener_query:
+                    step_text += (f"Your partner has sent you the following message: "
+                                  f"{comm_channel_char}.\n")
+            else:
+                step_text += (f"\nAt the end of game #{game_id}, here is a special step "
+                              f"where your partner is being shown the exact stimulus that you "
+                              f"observe.\n")
+
+            if step_id == round_idx_reward and hasattr(self, 'listener_actions'):
+                fb = "Your partner has decided that both of you were observing "
+                fb += ("different latent meanings.\n"
+                       if self.listener_actions["decision"] > 0
+                       else "similar latent meanings.\n")
+                successful_game = (self.listener_actions["decision"]
+                                   == self.sample["target_decision_idx"].item())
+                fb += "This was correct. " if successful_game else "This was incorrect. "
+                fb += f"You and your partner have {'won' if successful_game else 'lost'} game #{game_id}.\n"
+                self._speaker_pending_feedback = fb
+
+            speaker_step_prompt_text = step_text + question_prompt
+            speaker_step_prompt_text += f"\n[NBR_QUESTIONS]{self.max_sentence_length+1}[/NBR_QUESTIONS]\n"
+            speaker_step_prompt_text += f"[MAX_NBR_OPTIONS]{max(2,self.vocab_size)}[/MAX_NBR_OPTIONS]\n"
+            bt_speaker_step_prompt = STR2BT(
+                speaker_step_prompt_text, max_sentence_length=self.max_prompt_sentence_length
+            )
+            bt_speaker_intro_prompt = STR2BT(
+                self._speaker_intro_text, max_sentence_length=self.max_prompt_sentence_length
+            )
+
+        np.set_printoptions(**printoptions)
+        return bt_speaker_prompt, speaker_prompt, bt_speaker_step_prompt, bt_speaker_intro_prompt
+
     def _update_listener_prompt(self, obs, info, context_prompt=""):
         ''' 
         Update the prompt based on the current observation.
@@ -450,13 +514,12 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
           context_prompt = context_prompt.replace("this is the exact ", "this was the exact ")
           context_prompt = context_prompt.replace("you are given", "you were given")
           '''
-          context_prompt = context_prompt.replace(
-            f"\nAt the end of game #{game_id-1}, here is a special step "
-            + f"where you are given an opportunity to sync with your partner: "
-            + f"this is the exact stimulus that "
-            + f"your partner observes",
-            f"\nIn game #{game_id-1}, this is the exact stimulus that "
-            + f"your partner was observing",
+          context_prompt = re.sub(
+            r'\nAt the end of game #(\d+), here is a special step '
+            r'where you are given an opportunity to sync with your partner: '
+            r'this is the exact stimulus that your partner observes',
+            lambda m: f'\nIn game #{m.group(1)}, this is the exact stimulus that your partner was observing',
+            context_prompt,
           )
           # Provide results about the previous game:
           if step_id == round_idx_reward:
@@ -501,32 +564,113 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         self.listener_context_prompt = context_prompt
         
         question_prompt = f"\nYou are an expert in the matter. Given the information above, answer the following question(s) to the best of your abilities.\n\n"
-        
+
         question_prompt += f"Question #1: At the current game #{game_id}, do think that you are observing a stimulus representing the same latent meaning as the stimulus that your partner is observing?\n"
         question_prompt += f"Answer either 0.:'Yes' or 1.:'No'.\n\n"
 
-        question_prompt += f"Question #2: What message should you send your partner "
-        question_prompt += f"to better coordinate with them towards fulfilling your common goal?\n"
-        question_prompt += f"The message is made up of {self.max_sentence_length} symbols, "
-        question_prompt += f"each of which can be filled with one of the {self.vocab_size} "
-        question_prompt += f"vocabulary symbols. For example: "
-        question_prompt += f"{self.communication_channel_action_space.sample()[0].tolist()}.\n"
-        question_prompt += f"This question corresponds to {self.max_sentence_length} implicit "
-        question_prompt += f"questions, one for each of the {self.max_sentence_length} symbols "
-        question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size-1}, corresponding to one of the {self.vocab_size} vocabulary symbols.\n"
-         
+        if self.allow_listener_query:
+            question_prompt += f"Question #2: What message should you send your partner "
+            question_prompt += f"to better coordinate with them towards fulfilling your common goal?\n"
+            question_prompt += f"The message is made up of {self.max_sentence_length} symbols, "
+            question_prompt += f"each of which can be filled with one of the {self.vocab_size} "
+            question_prompt += f"vocabulary symbols. For example: "
+            question_prompt += f"{self.communication_channel_action_space.sample()[0].tolist()}.\n"
+            question_prompt += f"This question corresponds to {self.max_sentence_length} implicit "
+            question_prompt += f"questions, one for each of the {self.max_sentence_length} symbols "
+            question_prompt += f"of the message. Thus, each possible answer id is between 0 and {self.vocab_size-1}, corresponding to one of the {self.vocab_size} vocabulary symbols.\n"
+
         listener_prompt = context_prompt+question_prompt
-        
-        # Eventhough we only ask two questions, we want to retrieve a message of length 
-        # max_sentence_length in the second one, where each positions can be filled with 
-        # one of the vocab symbols.
-        listener_prompt += f"\n[NBR_QUESTIONS]{self.max_sentence_length+1}[/NBR_QUESTIONS]\n"
-        listener_prompt += f"[MAX_NBR_OPTIONS]{max(2,self.vocab_size)}[/MAX_NBR_OPTIONS]\n"
+
+        _nbr_questions = (self.max_sentence_length + 1) if self.allow_listener_query else 1
+        _max_options = max(2, self.vocab_size) if self.allow_listener_query else max(2, self.nbr_distractors + 1 + int(self.rg_config.get('descriptive', True)))
+        listener_prompt += f"\n[NBR_QUESTIONS]{_nbr_questions}[/NBR_QUESTIONS]\n"
+        listener_prompt += f"[MAX_NBR_OPTIONS]{_max_options}[/MAX_NBR_OPTIONS]\n"
 
         bt_listener_prompt = STR2BT(listener_prompt, max_sentence_length=self.max_prompt_sentence_length)
-        np.set_printoptions(**printoptions) 
-        return bt_listener_prompt, listener_prompt
-    
+
+        # ── Discussion mode: also emit per-step and intro prompts ─────────────
+        bt_listener_step_prompt = None
+        bt_listener_intro_prompt = None
+        if self.discussion_mode:
+            # Capture static intro once (set on first call when context_prompt was "").
+            if not self._listener_intro_text:
+                intro_end = self.listener_context_prompt.find("\nStarting game")
+                if intro_end == -1:
+                    intro_end = len(self.listener_context_prompt)
+                self._listener_intro_text = self.listener_context_prompt[:intro_end].strip()
+
+            # Build per-step text: pending feedback + current stimulus/message.
+            # Only consume pending feedback at the listener's action round so the
+            # LLM actually sees it (step_id=0 is the speaker round; nobody reads it).
+            step_text = ""
+            if self._listener_pending_feedback and step_id == self.nbr_communication_rounds:
+                step_text += self._listener_pending_feedback
+                self._listener_pending_feedback = ""
+
+            if step_id == 0:
+                step_text += (f"\nStarting game #{game_id}, this is the new stimulus: "
+                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+            elif step_id != -1:
+                step_text += (f"\nAt game #{game_id}, you are observing stimulus: "
+                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+                step_text += (f"Your partner has sent you the following message: "
+                              f"{comm_channel_char}.\n")
+            else:
+                step_text += (f"\nAt the end of game #{game_id}, here is a special step "
+                              f"where you are given an opportunity to sync with your partner: "
+                              f"this is the exact stimulus that your partner observes: "
+                              f"{obs['stimulus'].reshape(-1).numpy()}.\n")
+
+            # Stash feedback text for prepending to the NEXT user turn.
+            # Guard with hasattr to avoid accessing listener_actions before the
+            # first env.step() has been called (listener_actions is set in step()).
+            if step_id == round_idx_reward and hasattr(self, 'listener_actions'):
+                successful_game = (self.listener_actions["decision"]
+                                   == self.sample["target_decision_idx"].item())
+                result_text = "You have decided that both of you were observing "
+                result_text += ("different latent meanings.\n"
+                                if self.listener_actions["decision"] > 0
+                                else "similar latent meanings.\n")
+                result_text += "This was correct. " if successful_game else "This was incorrect. "
+                result_text += f"You and your partner have {'won' if successful_game else 'lost'} game #{game_id}.\n"
+                if self.listener_feedback:
+                    # Listener-feedback is on: step_text here IS the feedback round
+                    # content (listener's stimulus replaced with speaker's exact stimulus).
+                    # Carry the full step_text so the LLM sees the speaker's actual stimulus.
+                    self._listener_pending_feedback = step_text + result_text
+                else:
+                    # Listener-feedback is off: no speaker-stimulus reveal; carry result only.
+                    self._listener_pending_feedback = result_text
+
+            if self.allow_listener_query:
+                _format_reminder = (
+                    f"\nIMPORTANT: Respond with ONLY {self.max_sentence_length + 1} "
+                    f"space-separated integers on a single line "
+                    f"(decision token1 token2 token3). "
+                    f"Example: 0 2 3 1. "
+                    f"Your response has a strict token budget — do NOT include any explanation or reasoning. "
+                    f"If your response is too long or gets cut off, you will be re-prompted and must answer more concisely.\n"
+                )
+            else:
+                _format_reminder = (
+                    f"\nIMPORTANT: Respond with ONLY 1 integer (your decision: 0 for same, 1 for different). "
+                    f"Example: 0. "
+                    f"Your response has a strict token budget — do NOT include any explanation or reasoning. "
+                    f"If your response is too long or gets cut off, you will be re-prompted and must answer more concisely.\n"
+                )
+            listener_step_prompt_text = step_text + question_prompt + _format_reminder
+            listener_step_prompt_text += f"\n[NBR_QUESTIONS]{_nbr_questions}[/NBR_QUESTIONS]\n"
+            listener_step_prompt_text += f"[MAX_NBR_OPTIONS]{_max_options}[/MAX_NBR_OPTIONS]\n"
+            bt_listener_step_prompt = STR2BT(
+                listener_step_prompt_text, max_sentence_length=self.max_prompt_sentence_length
+            )
+            bt_listener_intro_prompt = STR2BT(
+                self._listener_intro_text, max_sentence_length=self.max_prompt_sentence_length
+            )
+
+        np.set_printoptions(**printoptions)
+        return bt_listener_prompt, listener_prompt, bt_listener_step_prompt, bt_listener_intro_prompt
+
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return seed 
@@ -549,6 +693,11 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             # Context prompts:
             self.speaker_context_prompt = ""
             self.listener_context_prompt = ""
+            # Discussion-mode state (no-op when discussion_mode=False):
+            self._listener_intro_text = ""
+            self._listener_pending_feedback = ""
+            self._speaker_intro_text = ""
+            self._speaker_pending_feedback = ""
 
             #self.datasets["train"].datasets["train"].reset()
             self.datasets['test'].reset()
@@ -683,22 +832,33 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
         # Speaker and Listener prompts:
         if self.include_prompts:
-            self.bt_speaker_prompt, self.speaker_prompt = self._update_speaker_prompt(
-                obs=speaker_obs,
-                info=info,
-                context_prompt=self.speaker_context_prompt,
-            )
-            self.bt_listener_prompt, self.listener_prompt = self._update_listener_prompt(
-                obs=listener_obs,
-                info=info,
-                context_prompt=self.listener_context_prompt,
-            )
-        
+            (self.bt_speaker_prompt, self.speaker_prompt,
+             self.bt_speaker_step_prompt, self.bt_speaker_intro_prompt) = \
+                self._update_speaker_prompt(
+                    obs=speaker_obs,
+                    info=info,
+                    context_prompt=self.speaker_context_prompt,
+                )
+            (self.bt_listener_prompt, self.listener_prompt,
+             self.bt_listener_step_prompt, self.bt_listener_intro_prompt) = \
+                self._update_listener_prompt(
+                    obs=listener_obs,
+                    info=info,
+                    context_prompt=self.listener_context_prompt,
+                )
+
         self.observations = [speaker_obs, listener_obs]
         self.infos = [copy.deepcopy(info) for _ in range(self.nbr_players)]
         if self.include_prompts:
             self.infos[0]["prompt"] = self.bt_speaker_prompt
             self.infos[1]["prompt"] = self.bt_listener_prompt
+            if self.discussion_mode:
+                if self.bt_speaker_step_prompt is not None:
+                    self.infos[0]["step_prompt"] = self.bt_speaker_step_prompt
+                    self.infos[0]["intro_prompt"] = self.bt_speaker_intro_prompt
+                if self.bt_listener_step_prompt is not None:
+                    self.infos[1]["step_prompt"] = self.bt_listener_step_prompt
+                    self.infos[1]["intro_prompt"] = self.bt_listener_intro_prompt
          
         # Bookkeeping: setting values for next call:
         self.round_idx = (self.round_idx+1)%(self.nbr_communication_rounds+1)
@@ -1173,9 +1333,17 @@ def generate_receptive_constructive_test_env(**kwargs):
         kwargs['rg_config'] = rg_config
     
     # Create dataset:
+    if kwargs.get('domain', 'SCS') == 'categorical':
+        from symbolic_behaviour_benchmark.categorical_stimulus_dataset import (
+            CategoricalStimulusDataset,
+        )
+        _DatasetClass = CategoricalStimulusDataset
+    else:
+        _DatasetClass = SymbolicContinuousStimulusDataset
+
     train_dataset = kwargs.get("train_dataset", None)
     if train_dataset is None:
-        train_dataset = SymbolicContinuousStimulusDataset(
+        train_dataset = _DatasetClass(
             train=True,
             transform=None,
             sampling_strategy=kwargs.get("sampling_strategy", None),
@@ -1187,7 +1355,7 @@ def generate_receptive_constructive_test_env(**kwargs):
             prototype=None,
         )
 
-    test_dataset = SymbolicContinuousStimulusDataset(
+    test_dataset = _DatasetClass(
         train=False,
         transform=None,
         sampling_strategy=kwargs.get("sampling_strategy", None),
