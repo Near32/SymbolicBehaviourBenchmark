@@ -298,7 +298,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         if self.listener_feedback:
             round_idx_reward = -1
 
-        game_id = info['stimulus_idx']
+        game_id = info.get('cumulative_stimulus_idx', info['stimulus_idx'])
         step_id = info['round_idx']
         
         if context_prompt == "": 
@@ -308,7 +308,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
           
           context_prompt += f"In the first phase, you will get acquainted with "
           context_prompt += f"the atomic components of the possible observations. "
-          context_prompt += f"Then, the game counter will restart, and you will be tested with "
+          context_prompt += f"Then, you will be tested with "
           context_prompt += f"new observations, combining the same atomic components in novel ways.\n"
           
           context_prompt += f"At each game, each of you observes a stimulus, "
@@ -487,7 +487,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         if self.listener_feedback:
             round_idx_reward = -1
 
-        game_id = info['stimulus_idx']
+        game_id = info.get('cumulative_stimulus_idx', info['stimulus_idx'])
         step_id = info['round_idx']
  
         if context_prompt == "": 
@@ -497,7 +497,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
           
           context_prompt += f"In the first phase, you will get acquainted with "
           context_prompt += f"the atomic components of the possible observations. "
-          context_prompt += f"Then, the game counter will restart, and you will be tested with "
+          context_prompt += f"Then, you will be tested with "
           context_prompt += f"new observations, combining the same atomic components in novel ways.\n"
           
           context_prompt += f"At each game, each of you observes a stimulus, "
@@ -755,7 +755,8 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
             self.mode = "train"
 
                         # Which stimulus ?
-            self.stimulus_idx = 0 
+            self.stimulus_idx = 0
+            self._cumulative_stimulus_idx = 0
             self.round_idx = 0
             self.episode_ended = False
             self.episode_ends = False 
@@ -833,6 +834,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         info['nbr_communication_rounds'] = self.nbr_communication_rounds
         info['round_idx'] = self.round_idx
         info['stimulus_idx'] = self.stimulus_idx
+        info['cumulative_stimulus_idx'] = self._cumulative_stimulus_idx
         info['step_idx'] = self.step_count
         info['mode'] = self.dataloader_index2mode[self.dataloader_index]+f"{self.dataloader_index if self.mode=='train' else ''}"
         last_round = self.round_idx==self.nbr_communication_rounds if not(self.listener_feedback) else self.round_idx == -1 
@@ -891,6 +893,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
                 
         if self.round_idx==0:
             self.stimulus_idx = (self.stimulus_idx+1)%len(data_loader)
+            self._cumulative_stimulus_idx += 1
 
             if self.stimulus_idx==0:
                 self.dataloader_index = (self.dataloader_index+1)%len(self.dataloader_index2mode)
