@@ -180,13 +180,24 @@ class CategoricalStimulusDataset(SymbolicContinuousStimulusDataset):
             E.g. [['carrot', 'blue', 'triangle']] for n=1, nbr_latents=3.
         """
         nbr_latents = len(self.latent_dims)
+        if len(flat_arr) % nbr_latents != 0:
+            raise ValueError(
+                f"flat_arr length {len(flat_arr)} is not divisible by "
+                f"nbr_latents={nbr_latents}"
+            )
         n = len(flat_arr) // nbr_latents
         result = []
         for i in range(n):
             group = flat_arr[i * nbr_latents:(i + 1) * nbr_latents]
-            labels = [
-                self.latent_dims[lidx]['sections'][int(v)]['name']
-                for lidx, v in enumerate(group)
-            ]
+            labels = []
+            for lidx, v in enumerate(group):
+                idx = int(v)
+                sections = self.latent_dims[lidx]['sections']
+                if idx not in sections:
+                    raise ValueError(
+                        f"Index {idx} out of range for latent dim {lidx} "
+                        f"(valid: 0–{len(sections)-1})"
+                    )
+                labels.append(sections[idx]['name'])
             result.append(labels)
         return result
