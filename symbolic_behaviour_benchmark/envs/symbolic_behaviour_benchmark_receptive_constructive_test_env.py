@@ -197,15 +197,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         if self.kwargs.get('domain', 'SCS') == '3D':
             self.renderer = PyBulletRenderer(N_dim=self.nbr_latents)
 
-        # Categorical domain: text-conversion callable for prompt builders.
+        # Text-label domains: wire up text-conversion callable for prompt builders.
         self._stimulus_to_text = None
-        if self.kwargs.get('domain', 'SCS') == 'categorical':
-            base_ds = datasets['train'].datasets['train']
-            if not hasattr(base_ds, 'latent_class_to_text'):
-                raise TypeError(
-                    f"domain='categorical' requires a CategoricalStimulusDataset at "
-                    f"datasets['train'].datasets['train'], got {type(base_ds).__name__}"
-                )
+        base_ds = datasets['train'].datasets['train']
+        if hasattr(base_ds, 'latent_class_to_text'):
             self._stimulus_to_text = base_ds.latent_class_to_text
 
         # Actions consist of a dictionnary of two elements:
@@ -230,9 +225,10 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         # -previous referential game's reward,
         # -previous referential gamee's success boolean,
         # -a communication channel output (either from the speaker or listener agent).
-        _stim_low = 0 if self.kwargs.get('domain', 'SCS') == 'categorical' else -1
+        _is_text_domain = self.kwargs.get('domain', 'SCS') in ('categorical', 'pseudoword')
+        _stim_low = 0 if _is_text_domain else -1
         _stim_high = (self.kwargs.get('max_nbr_values_per_latent', 5) - 1
-                      if self.kwargs.get('domain', 'SCS') == 'categorical' else 1)
+                      if _is_text_domain else 1)
         self.stimulus_observation_space = spaces.Box(
             low=_stim_low,
             high=_stim_high,
@@ -941,9 +937,13 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         """
 
     def reset(self, **kwargs):
+        import random as _random
+        _episode_seed = int(self.np_random.integers(2**31))
+        np.random.seed(_episode_seed)
+        _random.seed(_episode_seed)
         self.nbr_players = 2
         self.mode = "train"
-        self.done = False 
+        self.done = False
 
         for pidx in range(self.nbr_players):
             self.per_player_permutation[pidx].reset()
@@ -1362,6 +1362,11 @@ def generate_receptive_constructive_test_env(**kwargs):
             CategoricalStimulusDataset,
         )
         _DatasetClass = CategoricalStimulusDataset
+    elif kwargs.get('domain', 'SCS') == 'pseudoword':
+        from symbolic_behaviour_benchmark.pseudoword_stimulus_dataset import (
+            PseudowordStimulusDataset,
+        )
+        _DatasetClass = PseudowordStimulusDataset
     else:
         _DatasetClass = SymbolicContinuousStimulusDataset
 
