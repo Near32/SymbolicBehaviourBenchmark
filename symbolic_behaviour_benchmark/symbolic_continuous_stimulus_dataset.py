@@ -1,8 +1,7 @@
 from typing import Dict, List
 
 import sys
-import random
-import numpy as np 
+import numpy as np
 import argparse 
 import copy
 
@@ -41,7 +40,11 @@ class SymbolicContinuousStimulusDataset:
         self.sampling_strategy = sampling_strategy
         self.split_strategy = split_strategy
 
+        self._rng = np.random.default_rng()
         self.reset()
+
+    def seed(self, s: int):
+        self._rng = np.random.default_rng(int(s))
 
     def reset_sampling(self):
         self.imgs = [np.zeros((64,64,3))]
@@ -251,13 +254,12 @@ class SymbolicContinuousStimulusDataset:
                     for lidx, vws in self.per_latent_value_weights.items():
                         norm = sum(vws)
                         probs = [vw/norm for vw in vws]
-                        sampled_vidx = np.random.choice(
-                            a=np.arange(len(vws)),
-                            size=1,
+                        sampled_vidx = self._rng.choice(
+                            np.arange(len(vws)),
                             p=probs,
                         )
-                    
-                        coord[lidx] = sampled_vidx 
+
+                        coord[lidx] = sampled_vidx
                 
                     # Check that we have not already sampled it:
                     same = len(sampled_coord) and any([all(coord==c) for c in sampled_coord])
@@ -279,9 +281,7 @@ class SymbolicContinuousStimulusDataset:
                     # Convert to sample's trueidx:
                     sampled_obj_centric_trueidx = self.coord2idx(coord)
                     # sampled_obj_centric_trueidx is an object-centric index...
-                    # BEWARE: random's randint gives values within low and high, both incluse!!!
-                    # on the contrary to numpy's random.randint which is low(inclusive) and high(exclusive).
-                    sampled_trueidx = sampled_obj_centric_trueidx*self.nbr_object_centric_samples + random.randint(0, self.nbr_object_centric_samples-1)
+                    sampled_trueidx = sampled_obj_centric_trueidx*self.nbr_object_centric_samples + int(self._rng.integers(0, self.nbr_object_centric_samples))
                     # Record for sampling, iff valid trueidx:
                     # Otherwise, we need to sample again...
                     if sampled_trueidx in self.trueidx2idx:
@@ -303,8 +303,8 @@ class SymbolicContinuousStimulusDataset:
                         norm = coord_weights.sum()
                         probs = [cw/norm for cw in coord_weights]
                         # inversely proportional to the distance:
-                        replacement_idx = np.random.choice(
-                            a=len(probs),
+                        replacement_idx = self._rng.choice(
+                            len(probs),
                             size=1,
                             p=probs,
                         ).item()
@@ -362,7 +362,7 @@ class SymbolicContinuousStimulusDataset:
             self.latent_sizes = []
             self.dataset_size = 1
             for l_idx in range(self.nbr_latents):
-                l_size = np.random.randint(low=self.min_nbr_values_per_latent, high=self.max_nbr_values_per_latent+1)
+                l_size = int(self._rng.integers(self.min_nbr_values_per_latent, self.max_nbr_values_per_latent+1))
                 self.dataset_size *= l_size
                 self.latent_sizes.append(l_size)
                 self.latent_dims[l_idx] = {'size': l_size}
@@ -374,13 +374,13 @@ class SymbolicContinuousStimulusDataset:
                 for s_idx in range(l_size):
                     s_d = {}
                     s_d['section_offset'] = -1+s_idx*self.latent_dims[l_idx]['value_section_size']
-                    s_d['sigma'] = np.random.uniform(
-                        low=self.latent_dims[l_idx]['min_sigma']+eps,
-                        high=self.latent_dims[l_idx]['max_sigma']-eps,
+                    s_d['sigma'] = self._rng.uniform(
+                        self.latent_dims[l_idx]['min_sigma']+eps,
+                        self.latent_dims[l_idx]['max_sigma']-eps,
                     )
                     s_d['safe_section_size'] = self.latent_dims[l_idx]['value_section_size'] - 6*s_d['sigma']
                     s_d['safe_section_mean_offset'] = 3*s_d['sigma']
-                    s_d['mean_ratio'] = np.random.uniform(low=0,high=1.0)
+                    s_d['mean_ratio'] = self._rng.uniform(0, 1.0)
                     s_d['mean'] = s_d['section_offset'] + s_d['safe_section_mean_offset'] + s_d['mean_ratio'] * s_d['safe_section_size']
                     
                     self.latent_dims[l_idx]['sections'][s_idx] = s_d
@@ -439,7 +439,7 @@ class SymbolicContinuousStimulusDataset:
             for lvalue in range(self.latent_dims[lidx]['size']):
                 oc_samples = []
                 for oc_sidx in range(self.nbr_object_centric_samples):
-                    lvalue_sample = np.random.normal(
+                    lvalue_sample = self._rng.normal(
                         loc=self.latent_dims[lidx]['sections'][lvalue]['mean'],
                         scale=self.latent_dims[lidx]['sections'][lvalue]['sigma'],
                     )
@@ -459,7 +459,7 @@ class SymbolicContinuousStimulusDataset:
         """
         batch_size = latent_class.shape[0]
         if object_centric_sample_idx is None:
-            object_centric_sample_idx = np.random.randint(low=0,high=self.nbr_object_centric_samples)
+            object_centric_sample_idx = int(self._rng.integers(0, self.nbr_object_centric_samples))
 
         observations = np.zeros((batch_size, self.nbr_latents))
         for bidx in range(batch_size):
@@ -487,7 +487,7 @@ class SymbolicContinuousStimulusDataset:
             for lidx in range(self.nbr_latents):
                 lvalue = latent_class[bidx,lidx]
                 if sample:
-                    lvalue_sample = np.random.normal(
+                    lvalue_sample = self._rng.normal(
                         loc=self.latent_dims[lidx]['sections'][lvalue]['mean'],
                         scale=self.latent_dims[lidx]['sections'][lvalue]['sigma'],
                     )
@@ -658,7 +658,7 @@ class SymbolicContinuousStimulusDataset:
         #return random_state.randint(low=0, high=self.nbr_values_per_latent, size=(num, self.nbr_latents))
         # It turns out the random state is not really being updated apparently.
         # Therefore it was always sampling the same values...
-        random_indices = np.random.randint(low=0, high=self.dataset_size, size=(num,))
+        random_indices = self._rng.integers(0, self.dataset_size, size=(num,))
         return np.stack([self.getlatentclass(ridx) for ridx in random_indices], axis=0)
         
     def sample_observations_from_factors(self, factors, random_state):
