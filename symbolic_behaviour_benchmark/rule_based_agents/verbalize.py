@@ -56,19 +56,23 @@ class PosdisHypothesisTracker:
         if active:
             infer_parts = []
             for i, t in active:
-                key = (i, t)
-                if key in self._hyps:
-                    s = self._hyps[key]
-                    note = (
-                        "[consistent, confirmed]"
+                best_val = self.best_value(i, t)
+                vm = self._value_map.get((i, t), {})
+                if vm:
+                    n_obs  = sum(vm.values())
+                    source = f"[from {n_obs} feedback obs]"
+                elif (i, t) in self._hyps:
+                    s = self._hyps[(i, t)]
+                    source = (
+                        "[consistent, confirmed via T-1]"
                         if s["confirmed"] == s["seen"] and s["seen"] > 0
-                        else "[consistent, tentative]"
+                        else "[consistent, tentative via T-1]"
                     )
                 else:
-                    note = "[new]"
-                infer_parts.append(f"symbol {t} (pos {i}) -> feature {i}={t - 1} {note}")
+                    source = "[new, T-1 fallback]"
+                infer_parts.append(f"symbol {t} (pos {i}) -> value={best_val} {source}")
             infer_str = (
-                "Speaker sent " + msg_s + ". Inferred: "
+                "Speaker sent " + msg_s + ". Decoded: "
                 + "; ".join(infer_parts) + ". "
             )
         else:
@@ -155,26 +159,39 @@ class PosdisHypothesisTracker:
     # -- Private helpers --------------------------------------------------------
 
     def _format_prior(self, game_idx: int) -> str:
-        if not self._hyps:
+        if not self._hyps and not self._value_map:
             return (
-                f"Game {game_idx}: No prior games yet -- reasoning relies on the "
-                "positional-code assumption (symbol T at position i likely encodes "
-                "feature i with value T-1). "
+                f"Game {game_idx}: No prior games yet -- using T-1 fallback "
+                "(symbol T at position i assumed to encode value T-1). "
             )
-        hyp_parts = []
-        for (pos, tok), s in sorted(self._hyps.items()):
-            seen, conf = s["seen"], s["confirmed"]
-            status = (
-                "confirmed"
-                if conf == seen and conf > 0
-                else f"tentative -- {conf}/{seen} games correct"
-            )
-            hyp_parts.append(
-                f"symbol {tok} at pos {pos} -> feature {pos}={tok - 1} [{status}]"
-            )
+        parts = []
+        all_keys = sorted(set(self._value_map.keys()) | set(self._hyps.keys()))
+        for (pos, tok) in all_keys:
+            vm  = self._value_map.get((pos, tok), {})
+            hyp = self._hyps.get((pos, tok), {"seen": 0, "confirmed": 0})
+            if vm:
+                best_val = max(vm, key=vm.get)
+                n_obs    = sum(vm.values())
+                n_best   = vm[best_val]
+                conf_str = (
+                    f"confirmed from {n_obs} feedback obs"
+                    if n_best == n_obs
+                    else f"best of {n_best}/{n_obs} feedback obs"
+                )
+                parts.append(f"symbol {tok} at pos {pos} -> value {best_val} [{conf_str}]")
+            else:
+                seen, conf = hyp["seen"], hyp["confirmed"]
+                status = (
+                    "confirmed"
+                    if conf == seen and conf > 0
+                    else f"tentative -- {conf}/{seen} games correct"
+                )
+                parts.append(
+                    f"symbol {tok} at pos {pos} -> value {tok - 1} [T-1 fallback, {status}]"
+                )
         return (
             f"Game {game_idx}: Accumulated hypotheses ({game_idx} prior game(s)) -- "
-            + "; ".join(hyp_parts) + ". "
+            + "; ".join(parts) + ". "
         )
 
     def _format_match(
@@ -183,12 +200,11 @@ class PosdisHypothesisTracker:
         listener_latents,
         verdict: str,
     ) -> str:
-        # Message-decoded comparison (mirrors rb_listener T-1 decoding; unreliable under vocab permutation).
         if listener_latents is not None:
             try:
                 stimuli = np.asarray(listener_latents)[0]   # (nbr_views, nbr_latents)
                 obs_obj = stimuli[0].flatten()               # base latent values
-                decoded = {i: t - 1 for i, t in active}
+                decoded = {i: self.best_value(i, t) for i, t in active}
                 n_match = sum(
                     int(obs_obj[i]) == decoded[i]
                     for i in decoded if i < len(obs_obj)
