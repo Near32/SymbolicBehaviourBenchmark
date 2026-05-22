@@ -24,7 +24,6 @@ from symbolic_behaviour_benchmark.symbolic_continuous_stimulus_dataset import Sy
 from symbolic_behaviour_benchmark.utils import DualLabeledDataset
 from symbolic_behaviour_benchmark.utils import DictDatasetWrapper
 
-from symbolic_behaviour_benchmark.utils.pybullet_renderer	import PyBulletRenderer
 from symbolic_behaviour_benchmark.utils.utils import STR2BT, BT2STR
 
 
@@ -201,6 +200,7 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         # 3D Renderer:
         self.renderer = None
         if self.kwargs.get('domain', 'SCS') == '3D':
+            from symbolic_behaviour_benchmark.utils.pybullet_renderer import PyBulletRenderer
             self.renderer = PyBulletRenderer(N_dim=self.nbr_latents)
 
         # Text-label domains: wire up text-conversion callable for prompt builders.

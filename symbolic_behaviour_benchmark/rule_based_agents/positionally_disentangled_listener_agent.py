@@ -62,7 +62,14 @@ class PositionallyDisentangledListenerAgent(object):
         rtu_widx = np.stack([round_target_utterance_widx]*round_stimuli.shape[0], axis=0)
         # nbr_stimulus x stimulus_dim_we_care_about 
         round_stimuli_scores = (round_stimuli==rtu_widx).astype(float).sum(axis=-1)
-        round_decision = round_stimuli_scores.argmax(axis=0).astype(float)
+        if round_stimuli.shape[0] == 1:
+            # Binary descriptive case (nbr_distractors=0): argmax of a 1-element array is
+            # always 0 regardless of match quality. Instead, check whether the single
+            # stimulus fully matches all active (non-EoS) tokens in the message.
+            n_active = int((round_target_utterance > 0).sum())
+            round_decision = 0.0 if round_stimuli_scores[0] >= max(n_active, 1) else 1.0
+        else:
+            round_decision = round_stimuli_scores.argmax(axis=0).astype(float)
         action_dict["decision"][0,0] = round_decision
         
         return action_dict
