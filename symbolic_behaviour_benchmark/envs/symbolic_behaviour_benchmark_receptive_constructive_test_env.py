@@ -60,12 +60,16 @@ class CommunicationChannelPermutation(object):
         
         self.reset()
 
-    def reset(self):
+    def reset(self, rng=None):
         # Communication Channel:
+        # The vocab bijection must be a deterministic function of the env seed.
+        # When an instance RNG is provided (per-episode, from the env's np_random)
+        # we use it; otherwise (construction-time, before the env is seeded) we
+        # leave the identity bijection — it is re-shuffled at the first env.reset().
         shuffledarr = np.arange(start=1,stop=self.vocab_size+1)
-        if not self.identity:
-            np.random.shuffle(shuffledarr)
-        
+        if not self.identity and rng is not None:
+            rng.shuffle(shuffledarr)
+
         # WARNING: idx 0 is the grounded EoS symbol:
         self.communication_channel_bijection_decoder = { idx+1: v.item() for idx, v in enumerate(shuffledarr)}
         self.communication_channel_bijection_decoder[0] = 0 
@@ -765,7 +769,24 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
-        return seed 
+        # Make the dataset CONTENT (latent value space, train/test split) a
+        # deterministic function of the seed. The stimulus datasets seed their
+        # own RNG from entropy at construction; without this, two identically
+        # seeded envs would hold different content. We derive a content seed from
+        # the freshly-seeded np_random, reseed every (inner + wrapper) dataset,
+        # and regenerate their content so it depends only on `seed`.
+        if getattr(self, "datasets", None):
+            content_seed = int(self.np_random.integers(2**31))
+            for _wrapper_ds in self.datasets.values():
+                if hasattr(_wrapper_ds, "datasets"):
+                    for _inner_ds in _wrapper_ds.datasets.values():
+                        if hasattr(_inner_ds, "seed"):
+                            _inner_ds.seed(content_seed)
+                if hasattr(_wrapper_ds, "seed"):
+                    _wrapper_ds.seed(content_seed)
+                if hasattr(_wrapper_ds, "reset"):
+                    _wrapper_ds.reset()
+        return seed
 
     def _regularise_communication_channel(self, communication_channel_content):
         # Regularise the use of EoS symbol which is idx 0 of the vocabulary:
@@ -897,6 +918,9 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         info = {} #{key:value for key, value in self.sample.items()}
         info["speaker_exp_latents"] = self.sample["speaker_exp_latents"].numpy()
         info["listener_exp_latents"] = self.sample["listener_exp_latents"].numpy()
+        if self._stimulus_to_text is not None:
+            info["speaker_exp_text"] = self._stimulus_to_text(info["speaker_exp_latents"].flatten())
+            info["listener_exp_text"] = self._stimulus_to_text(info["listener_exp_latents"].flatten())
         info['round_id'] = np.zeros((1,self.nbr_communication_rounds+1))
         
         if self.round_idx>=0:
@@ -919,7 +943,9 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
         and self.round_idx==-1\
         and not self.feedback_provided:
             listener_obs['stimulus'] = copy.deepcopy(speaker_obs['stimulus'])
-            info["listener_exp_latents"] = copy.deepcopy(info["speaker_exp_latents"]) 
+            info["listener_exp_latents"] = copy.deepcopy(info["speaker_exp_latents"])
+            if "speaker_exp_text" in info:
+                info["listener_exp_text"] = copy.deepcopy(info["speaker_exp_text"])
             self.feedback_provided = True
         else:
             self.feedback_provided = False 
@@ -1018,12 +1044,21 @@ class SymbolicBehaviourBenchmark_ReceptiveConstructiveTestEnv(gym.Env):
                 for _inner_ds in _wrapper_ds.datasets.values():
                     if hasattr(_inner_ds, 'seed'):
                         _inner_ds.seed(_episode_seed)
+            # Seed the wrapper's own stimulus-index sampler so per-game stimulus
+            # selection is seed-determined and independent of player actions.
+            if hasattr(_wrapper_ds, 'seed'):
+                _wrapper_ds.seed(_episode_seed)
         self.nbr_players = 2
         self.mode = "train"
         self.done = False
 
         for pidx in range(self.nbr_players):
-            self.per_player_permutation[pidx].reset()
+            # Each player gets a DISTINCT but reproducible vocab bijection: derive
+            # an independent RNG from (episode_seed, player_index) so the speaker's
+            # and listener's permutations differ (the private code the listener must
+            # learn) without depending on call order.
+            perm_rng = np.random.default_rng([_episode_seed, pidx])
+            self.per_player_permutation[pidx].reset(rng=perm_rng)
 
         # Step count since episode start
         self.step_count = 0

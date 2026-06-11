@@ -4,7 +4,7 @@ from torch.utils.data.dataset import Dataset as torchDataset
 import numpy as np 
 import copy
 
-def shuffle(experiences, orders=None):
+def shuffle(experiences, orders=None, rng=None):
     st_size = experiences.shape
     batch_size = st_size[0]
     nbr_distractors_po = st_size[1]
@@ -13,8 +13,13 @@ def shuffle(experiences, orders=None):
     output_order = []
     for b in range(batch_size):
         if orders is None:
-            perm = torch.randperm(nbr_distractors_po)
-        else: 
+            if rng is not None:
+                # Seed-deterministic, action-independent permutation (the target's
+                # position among distractors). Avoid torch.randperm's GLOBAL RNG.
+                perm = torch.as_tensor(rng.permutation(nbr_distractors_po), dtype=torch.long)
+            else:
+                perm = torch.randperm(nbr_distractors_po)
+        else:
             perm = orders[b]
         #if experiences.is_cuda: perm = perm.cuda()
         output_order.append(perm)
@@ -39,8 +44,17 @@ class Dataset(torchDataset):
         
         self.nbr_distractors = self.kwargs['nbr_distractors']
         self.nbr_stimulus = self.kwargs['nbr_stimulus']
-        
-        self.classes = None 
+
+        self.classes = None
+
+        # Instance RNG: all per-item sampling randomness (target retention,
+        # similarity gating, target-position shuffle) must go through this so the
+        # dataset is a deterministic function of the seed and never touches the
+        # GLOBAL torch / numpy / random streams. Seeded per episode by the env.
+        self._rng = np.random.default_rng()
+
+    def seed(self, s: int) -> None:
+        self._rng = np.random.default_rng(int(s))
 
     def getNbrDistractors(self, mode='train'):
         return self.nbr_distractors[mode]
@@ -131,7 +145,7 @@ class Dataset(torchDataset):
             exp_labels = sampled_d["exp_labels"]
             #_, _, exp_labels, _ = self.sample(idx=idx, target_only=True)
             from_class = None
-            if torch.rand(size=(1,)).item() < similarity_ratio:
+            if float(self._rng.random()) < similarity_ratio:
                 from_class = exp_labels
 
         sample_d = self.sample(idx=idx, from_class=from_class)
@@ -153,7 +167,7 @@ class Dataset(torchDataset):
         
         retain_target = True
         if self.kwargs["descriptive"]:
-            rand_value = torch.rand(size=(1,)).item() 
+            rand_value = float(self._rng.random())
             #print(f"DESCR : {rand_value:0.2f} < {self.kwargs['descriptive_target_ratio']}")
             retain_target = rand_value < self.kwargs['descriptive_target_ratio']
             # Target experience is excluded from the experiences yielded to the listener:
@@ -189,7 +203,8 @@ class Dataset(torchDataset):
                     v = torch.from_numpy(np.array(v))
                 listener_sample_d[k][:,0] = v.unsqueeze(0)
             
-        listener_sample_d["experiences"], target_decision_idx, orders = shuffle(listener_sample_d["experiences"])
+        listener_sample_d["experiences"], target_decision_idx, orders = shuffle(
+            listener_sample_d["experiences"], rng=getattr(self, "_rng", None))
         if not retain_target:   
             # The target_decision_idx is set to `nbr_experiences`:
             target_decision_idx = (self.nbr_distractors[self.mode]+1)*torch.ones(1).long()

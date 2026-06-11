@@ -1,7 +1,7 @@
 from typing import Dict, List, Tuple
 from .dataset import Dataset
 import torch
-import random
+import numpy as np
 import copy
 
 
@@ -13,7 +13,19 @@ class DualLabeledDataset(Dataset):
                             'test':kwargs['test_dataset']
                             }
         self.mode = kwargs['mode']
+        # Instance RNG for stimulus-index sampling. Seeded per episode by the env
+        # so selection is a deterministic function of the seed and independent of
+        # the players' actions (never use the global `random`/`np.random`).
+        self._rng = np.random.default_rng()
         self.reset_classes()
+
+    def seed(self, s: int) -> None:
+        self._rng = np.random.default_rng(int(s))
+
+    def _choice(self, set_indices):
+        """Action-independent, seed-deterministic choice from a set of indices."""
+        idx_list = sorted(set_indices)
+        return idx_list[int(self._rng.integers(len(idx_list)))]
     
     def reset_classes(self):
         self.train_classes = {}
@@ -182,10 +194,10 @@ class DualLabeledDataset(Dataset):
                 test = False 
 
         for choice_idx in range(nbr_samples):
-            chosen = random.choice(list(set_indices))
+            chosen = self._choice(set_indices)
             set_indices.remove(chosen)
             indices.append(chosen)
-        
+
         sample_d = {
             "experiences":[],
             "exp_labels":[],
@@ -311,10 +323,10 @@ class DualLabeledDataset(Dataset):
                 test = False 
 
         for choice_idx in range(nbr_samples):
-            chosen = random.choice(list(set_indices))
+            chosen = self._choice(set_indices)
             set_indices.remove(chosen)
             indices.append(chosen)
-        
+
         sample_d = {
             "experiences":[],
             "exp_labels":[],
