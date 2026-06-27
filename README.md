@@ -4,6 +4,20 @@ Suite of OpenAI Gym-compatible multi-agent reinforcement learning environment ce
 
 ![default_env](https://www.github.com/Near32/SymbolicBehaviourBenchmark/raw/main/resources/symbolic-continuous-stimulus-representation-binding-problem-Descriptive+ListenerFeedback.drawio.png)
 
+## Branches
+
+| Branch | Description |
+|--------|-------------|
+| `main` | Stable release |
+| [`S2B-LM`](https://github.com/Near32/SymbolicBehaviourBenchmark/tree/S2B-LM) | Adaptation of S2B for language models — removes numerical processing as a confounding factor and incorporates chain-of-thought scaffolding to actively elicit Compositional Learning Behaviours (CLBs), as described in [Denamganai, 2025, "On Compositional Learning Behaviours in Formal Mathematics"](https://openreview.net/forum?id=M3kKajgMpY) |
+
+To use the S2B-LM version:
+
+```bash
+git clone -b S2B-LM https://www.github.com/Near32/SymbolicBehaviourBenchmark
+pip install -e ./SymbolicBehaviourBenchmark/
+```
+
 ## Usage
 
 `gym` must be installed. Environments can be created as follows, for instance, in order to test for receptivity and constructivity:
